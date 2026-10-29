@@ -17,5 +17,22 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.strict,
+  {
+    // The domain layer is pure: no app state, storage, browser APIs, or UI.
+    files: ['src/domain/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/app/**', '**/infra/**', '**/ui/**', 'preact', 'preact/*', '@preact/*'],
+              message: 'src/domain must not depend on outer layers.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   prettier,
 );

@@ -1,0 +1,87 @@
+/* Design tokens: colors (light and dark), fonts, and the style lanes that color-code heats. */
+:root {
+  --bg: #f3f3f8;
+  --surface: #ffffff;
+  --sunk: #e9e9f1;
+  --ink: #191a2c;
+  --muted: #62647a;
+  --line: #dcdce7;
+  --accent: #5e2a9c;
+  --accent-soft: #efe6fa;
+  --accent-ink: #ffffff;
+  --smooth: #0b8582;
+  --standard: #3a4cc0;
+  --rhythm: #c96a10;
+  --latin: #be2c66;
+  --other: #6b6e85;
+  --good: #1e7a45;
+  --warn: #b4500c;
+  --warn-soft: #fdebdc;
+  --live: #e0b000;
+  --f-display: 'Bricolage Grotesque', 'Avenir Next', system-ui, sans-serif;
+  --f-body: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #12121c;
+    --surface: #1c1c2a;
+    --sunk: #252536;
+    --ink: #ecebf5;
+    --muted: #a0a1b8;
+    --line: #2f2f44;
+    --accent: #b98af0;
+    --accent-soft: #2d2245;
+    --accent-ink: #14101e;
+    --smooth: #3cc2bd;
+    --standard: #8695ff;
+    --rhythm: #f2a04e;
+    --latin: #f2709f;
+    --other: #9c9eb5;
+    --good: #5bd08c;
+    --warn: #f5a35c;
+    --warn-soft: #3a2617;
+    --live: #f2cb3a;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #12121c;
+  --surface: #1c1c2a;
+  --sunk: #252536;
+  --ink: #ecebf5;
+  --muted: #a0a1b8;
+  --line: #2f2f44;
+  --accent: #b98af0;
+  --accent-soft: #2d2245;
+  --accent-ink: #14101e;
+  --smooth: #3cc2bd;
+  --standard: #8695ff;
+  --rhythm: #f2a04e;
+  --latin: #f2709f;
+  --other: #9c9eb5;
+  --good: #5bd08c;
+  --warn: #f5a35c;
+  --warn-soft: #3a2617;
+  --live: #f2cb3a;
+  color-scheme: dark;
+}
+
+/* Style lanes: set --lane for whatever is inside. */
+.lane-smooth {
+  --lane: var(--smooth);
+}
+.lane-standard {
+  --lane: var(--standard);
+}
+.lane-rhythm {
+  --lane: var(--rhythm);
+}
+.lane-latin {
+  --lane: var(--latin);
+}
+.lane-other {
+  --lane: var(--other);
+}

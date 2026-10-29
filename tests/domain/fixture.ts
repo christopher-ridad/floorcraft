@@ -2,9 +2,9 @@ import { deriveCompetition, type Competition } from '../../src/domain/competitio
 import type { CallbackMarks, Couple, ScheduleItem } from '../../src/domain/types';
 
 /**
- * The same small competition as the legacy characterization tests, so results can be compared
- * one to one. Scheduled minutes after midnight: h0 510, h1 517, h2 528, h3 535, h4 540,
- * h5 545, h6 550.
+ * A small competition: three events with first rounds, a semi and finals, and four couples
+ * including one entry that matches nothing. Scheduled minutes after midnight: h0 510, h1 517,
+ * h2 528, h3 535, h4 540, h5 545, h6 550.
  */
 export const schedule: ScheduleItem[] = [
   { kind: 'break', id: 'h0', scheduledTime: '8:30 AM', label: 'Smooth Events' },

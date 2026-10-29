@@ -1,6 +1,6 @@
 /**
- * The live logic, checked against the same scenarios and results as the legacy
- * characterization tests (tests/legacy/appLogic.test.ts), quirks included.
+ * The live logic. These scenarios and results were first recorded against the original app
+ * before the rewrite, so they pin down its behavior, quirks included.
  */
 import { describe, expect, it } from 'vitest';
 import { alertKey, nextAlert, type AlertPreferences } from '../../src/domain/alerts';

@@ -9,7 +9,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:legacy": "node build.js",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -18,7 +17,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build && npm run build:legacy"
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -26,7 +25,6 @@
     "@preact/preset-vite": "^2.10.6",
     "@testing-library/preact": "^3.2.6",
     "@testing-library/user-event": "^14.6.8",
-    "@types/jsdom": "^30.0.0",
     "@types/node": "^26.6.6",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",

@@ -16,20 +16,7 @@ function layerRule(files, forbidden) {
 }
 
 export default tseslint.config(
-  {
-    // Legacy app: replaced during the rewrite, not linted until then.
-    ignores: [
-      'index.html',
-      'build.js',
-      'src/app.html',
-      'src/parse.js',
-      'node_modules',
-      'dist',
-      'coverage',
-      'test-results',
-      'playwright-report',
-    ],
-  },
+  { ignores: ['node_modules', 'dist', 'coverage', 'test-results', 'playwright-report'] },
   js.configs.recommended,
   ...tseslint.configs.strict,
   // Layers depend inward only: ui → app → domain, and infra implements app's ports.

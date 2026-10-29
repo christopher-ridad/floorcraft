@@ -1,8 +1,2 @@
-# Legacy app: replaced during the rewrite.
-index.html
-build.js
-src/app.html
-src/parse.js
-
 data/
 package-lock.json

@@ -15,23 +15,21 @@ Built for the Purdue Ballroom Classic, with the 2025 schedule as the tentative s
 
 ## Project layout
 
-The app is being rewritten from `src/app.html` into a layered TypeScript + Preact app. Both build until the legacy files are removed.
+A TypeScript + Preact app in four layers:
 
 ```
 src/domain/        Pure logic: parsing, entry matching, callbacks, pace, alerts
 src/app/           Signals store, actions, and the interfaces it needs (ports)
 src/infra/         Claude database and localStorage sync, stored format, sound, wake lock
 src/ui/            Preact components and CSS modules
-src/main.tsx       Wires everything together
-src/index.html     Page entry for Vite
+src/main.tsx       Wires the browser adapters into the store and renders the app
+index.html         Page entry
 tests/             Unit and component tests (Vitest)
 e2e/               Smoke test against the built file (Playwright)
 data/              2025 tentative schedule and 2026 partnerships
-
-src/app.html, src/parse.js, build.js, index.html   Legacy app (to be removed)
 ```
 
-Layers only depend inward (ui → app → domain; infra implements app's ports). ESLint enforces this.
+Layers only depend inward: ui → app → domain, and infra implements the interfaces app defines. ESLint enforces this.
 
 ## Running it
 
@@ -43,10 +41,16 @@ npm run dev        # local dev server with hot reload
 npm run build      # build the app into one self-contained file: dist/index.html
 npm test           # unit and component tests
 npm run test:e2e   # browser smoke test (run npm run build first; npx playwright install chromium once)
-npm run check      # lint, formatting, typecheck, tests, and builds (what CI runs)
+npm run check      # lint, formatting, typecheck, tests, and build
 ```
 
 `dist/index.html` runs straight from disk or any static host.
+
+## Deploying
+
+CI runs every check on pull requests. Each push to `main` that passes is published to GitHub Pages; to turn that on once, go to **Settings → Pages** and set **Source** to **GitHub Actions**.
+
+To update the shared Claude artifact, publish the new `dist/index.html` to the same artifact.
 
 ## Syncing between phones
 

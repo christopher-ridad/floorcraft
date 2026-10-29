@@ -15,27 +15,38 @@ Built for the Purdue Ballroom Classic, with the 2025 schedule as the tentative s
 
 ## Project layout
 
+The app is being rewritten from `src/app.html` into a layered TypeScript + Preact app. Both build until the legacy files are removed.
+
 ```
-index.html                 Built app (open this, or host it)
-src/app.html               App UI, styles, and logic
-src/parse.js               Schedule/partnership parsing and event matching
-build.js                   Inlines parse.js into app.html → index.html
-data/                      2025 tentative schedule and 2026 partnerships
-tests/legacy/               Tests that pin down the current app's behavior
+src/domain/        Pure logic: parsing, entry matching, callbacks, pace, alerts
+src/app/           Signals store, actions, and the interfaces it needs (ports)
+src/infra/         Claude database and localStorage sync, stored format, sound, wake lock
+src/ui/            Preact components and CSS modules
+src/main.tsx       Wires everything together
+src/index.html     Page entry for Vite
+tests/             Unit and component tests (Vitest)
+e2e/               Smoke test against the built file (Playwright)
+data/              2025 tentative schedule and 2026 partnerships
+
+src/app.html, src/parse.js, build.js, index.html   Legacy app (to be removed)
 ```
+
+Layers only depend inward (ui → app → domain; infra implements app's ports). ESLint enforces this.
 
 ## Running it
 
-The app itself has no runtime dependencies. Development needs Node 20+.
+Development needs Node 20+.
 
 ```sh
 npm install
-npm run build   # regenerate index.html after editing src/
-npm test        # parser tests, plus characterization tests that load the built app in jsdom
-npm run check   # lint, formatting, typecheck, tests, and build (what CI runs)
+npm run dev        # local dev server with hot reload
+npm run build      # build the app into one self-contained file: dist/index.html
+npm test           # unit and component tests
+npm run test:e2e   # browser smoke test (run npm run build first; npx playwright install chromium once)
+npm run check      # lint, formatting, typecheck, tests, and builds (what CI runs)
 ```
 
-Open `index.html` in a browser, or host it anywhere static (GitHub Pages works: Settings → Pages → deploy from the `main` branch root).
+`dist/index.html` runs straight from disk or any static host.
 
 ## Syncing between phones
 
@@ -43,4 +54,4 @@ The shared version runs as a Claude artifact, which stores the schedule, the flo
 
 Opened on its own (for example from GitHub Pages), the app runs in **this phone only** mode: it works fully, but data is saved in that browser and isn't shared. To load the sample data, go to **Setup** and paste `data/schedule-2025-tentative.txt` and `data/partnerships-2026.txt` into the two import boxes.
 
-Adding a different shared backend (Firebase, Supabase, etc.) means replacing the `db` calls in `boot()` and `persist()` in `src/app.html`. The app reads and writes three documents: `comp/schedule`, `comp/entries`, and `comp/live`.
+Adding a different shared backend (Firebase, Supabase, etc.) means implementing the small `RawDocumentStore` interface in [src/infra/sync/documentSync.ts](src/infra/sync/documentSync.ts) and connecting it in [browserSyncConnector.ts](src/infra/sync/browserSyncConnector.ts). The app reads and writes three documents: `comp/schedule`, `comp/entries`, and `comp/live`. Each carries a `schemaVersion`; documents written by the original app are still read.

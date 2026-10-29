@@ -26,6 +26,8 @@ export default tseslint.config(
       'node_modules',
       'dist',
       'coverage',
+      'test-results',
+      'playwright-report',
     ],
   },
   js.configs.recommended,
@@ -47,5 +49,6 @@ export default tseslint.config(
     '@preact/signals',
   ]),
   layerRule('src/infra/**/*.ts', ['**/ui/**', 'preact', 'preact/*', '@preact/*']),
+  layerRule('src/ui/**/*.{ts,tsx}', ['**/infra/**']),
   prettier,
 );

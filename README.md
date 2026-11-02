@@ -33,16 +33,20 @@ Layers only depend inward: ui → app → domain, and infra implements the inter
 
 ## Running it
 
-Development needs Node 20+.
+Development needs Node 20+, and Java 11+ for the Firebase emulators.
 
 ```sh
 npm install
-npm run dev        # local dev server with hot reload
-npm run build      # build the app into one self-contained file: dist/index.html
-npm test           # unit and component tests
-npm run test:e2e   # browser smoke test (run npm run build first; npx playwright install chromium once)
-npm run check      # lint, formatting, typecheck, tests, and build
+npm run dev            # local dev server with hot reload
+npm run emulators      # local Firebase (Auth + Firestore) with its UI at http://localhost:4000
+npm run build          # build the app into one self-contained file: dist/index.html
+npm test               # unit and component tests
+npm run test:emulator  # Firestore security rules and Firebase integration tests (starts the emulators)
+npm run test:e2e       # browser smoke test (run npm run build first; npx playwright install chromium once)
+npm run check          # lint, formatting, typecheck, tests, and build
 ```
+
+The data model and access rules are described in [docs/design/firebase-competitions.md](docs/design/firebase-competitions.md); the rules themselves are in [firestore.rules](firestore.rules).
 
 `dist/index.html` runs straight from disk or any static host.
 

@@ -74,3 +74,42 @@ export interface ScreenWakeLock {
   enable(): Promise<boolean>;
   disable(): Promise<void>;
 }
+
+/** Who this phone is signed in as. */
+export interface AuthUser {
+  uid: string;
+  /** True for a phone that joined with the team link and hasn't signed in with Google. */
+  isAnonymous: boolean;
+  displayName: string | null;
+  email: string | null;
+}
+
+export type AuthErrorCode =
+  /** The person closed the sign-in window. */
+  | 'cancelled'
+  /** That Google account is already used by another phone or person. */
+  | 'account-in-use'
+  | 'network'
+  | 'unknown';
+
+export class AuthFailure extends Error {
+  constructor(
+    readonly code: AuthErrorCode,
+    message: string = code,
+  ) {
+    super(message);
+    this.name = 'AuthFailure';
+  }
+}
+
+export interface AuthService {
+  /** Calls `listener` with the current user (null when signed out), then on every change. */
+  onUserChange(listener: (user: AuthUser | null) => void): () => void;
+  /** Signs in with Google. Captains always use this. Rejects with AuthFailure. */
+  signInWithGoogle(): Promise<void>;
+  /** Signs this phone in without an account, for joining with the team link. */
+  signInAnonymously(): Promise<AuthUser>;
+  /** Turns this phone's anonymous sign-in into a Google account, keeping the same user id. */
+  linkWithGoogle(): Promise<void>;
+  signOut(): Promise<void>;
+}

@@ -17,10 +17,13 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build"
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build",
+    "emulators": "firebase emulators:start",
+    "test:emulator": "firebase emulators:exec --only auth,firestore \"vitest run --config vitest.emulator.config.mts\""
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@playwright/test": "^1.64.1",
     "@preact/preset-vite": "^2.10.6",
     "@testing-library/preact": "^3.2.6",
@@ -28,6 +31,7 @@
     "@types/node": "^26.6.6",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
+    "firebase-tools": "^15.34.2",
     "jsdom": "^29.1.1",
     "prettier": "^3.9.10",
     "typescript": "^6.0.3",
@@ -39,6 +43,7 @@
   "dependencies": {
     "@preact/signals": "^2.11.4",
     "@preact/signals-core": "^1.14.5",
+    "firebase": "^13.2.0",
     "preact": "^11.1.0"
   }
 }

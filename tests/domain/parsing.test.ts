@@ -2,11 +2,12 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { formatClockTime, parseClockTime } from '../../src/domain/clock';
 import { matchEntry } from '../../src/domain/entries/matchEntry';
-import { parseEntries } from '../../src/domain/entries/parseEntries';
+import { parsePartnershipRows } from '../../src/domain/entries/parsePartnershipRows';
 import { classifyDanceStyle } from '../../src/domain/schedule/danceStyle';
 import { buildEventCatalog } from '../../src/domain/schedule/eventCatalog';
 import { parseHeatName } from '../../src/domain/schedule/heatName';
 import { parseSchedule } from '../../src/domain/schedule/parseSchedule';
+import type { Schedule, ScheduleItem } from '../../src/domain/types';
 
 const readData = (file: string) =>
   readFileSync(new URL(`../../data/${file}`, import.meta.url), 'utf8');
@@ -68,26 +69,41 @@ describe('heat names', () => {
 
 describe('schedule parsing', () => {
   it('parses every heat and break from the sample schedule', () => {
-    const items = parseSchedule(sampleSchedule);
+    const { items, events } = parseSchedule(sampleSchedule);
     expect(items.filter((item) => item.kind === 'heat')).toHaveLength(139);
     expect(items.some((item) => item.kind === 'break' && item.label === 'Smooth Awards')).toBe(
       true,
     );
+    expect(events).toHaveLength(new Set(items.flatMap(eventNumberOf)).size);
   });
 
-  it('reads heats, breaks and several items on one line', () => {
+  it('reads heats, breaks and several items on one line, and identifies the events', () => {
     const text =
       '8:30 AM Smooth Events 8:37 am [1] Bronze Amer. Smooth 1st Round (WT)\nno time here';
-    expect(parseSchedule(text, sequentialIds())).toEqual([
-      { kind: 'break', id: 'id1', scheduledTime: '8:30 AM', label: 'Smooth Events' },
-      {
-        kind: 'heat',
-        id: 'id2',
-        scheduledTime: '8:37 AM',
-        eventNumber: 1,
-        name: 'Bronze Amer. Smooth 1st Round (WT)',
-      },
-    ]);
+    expect(parseSchedule(text, { createId: sequentialIds() })).toEqual({
+      items: [
+        { kind: 'break', id: 'id1', scheduledTime: '8:30 AM', label: 'Smooth Events' },
+        {
+          kind: 'heat',
+          id: 'id2',
+          scheduledTime: '8:37 AM',
+          eventId: 'id3',
+          eventNumber: 1,
+          name: 'Bronze Amer. Smooth 1st Round (WT)',
+        },
+      ],
+      events: [
+        {
+          eventId: 'id3',
+          eventNumber: 1,
+          name: 'Bronze Amer. Smooth (WT)',
+          level: 'bronze',
+          style: 'smooth',
+          dances: 'WT',
+          confirmed: false,
+        },
+      ],
+    });
   });
 
   it('restores time order for text pasted from a two-column PDF', () => {
@@ -95,7 +111,7 @@ describe('schedule parsing', () => {
     const half = Math.ceil(lines.length / 2);
     const interleaved = lines.slice(0, half).map((line, i) => `${line} ${lines[half + i] ?? ''}`);
     const heatKeys = (text: string) =>
-      parseSchedule(text).flatMap((item) =>
+      parseSchedule(text).items.flatMap((item) =>
         item.kind === 'heat' ? [`${item.scheduledTime}${item.eventNumber}`] : [],
       );
 
@@ -103,52 +119,102 @@ describe('schedule parsing', () => {
   });
 });
 
-describe('partnership parsing', () => {
+describe('event identity across schedule updates', () => {
+  const original = parseSchedule(
+    [
+      '9:00 AM [1] Bronze Amer. Smooth 1st Round (WT)',
+      '9:10 AM [2] Silver Intl. Standard (WQ)',
+      '9:20 AM [3] Gold Amer. Rhythm (CR)',
+      '9:30 AM [1] Bronze Amer. Smooth Final (WT)',
+    ].join('\n'),
+  );
+  const reviewedEvents = original.events.map((event) => ({ ...event, confirmed: true }));
+  const idOf = (schedule: Schedule, eventNumber: number) =>
+    schedule.events.find((event) => event.eventNumber === eventNumber)?.eventId;
+
+  it('gives every heat of an event the same id', () => {
+    const ids = original.items.flatMap((item) =>
+      item.kind === 'heat' && item.eventNumber === 1 ? [item.eventId] : [],
+    );
+    expect(ids).toEqual([idOf(original, 1), idOf(original, 1)]);
+  });
+
+  it('keeps ids, and the review, for events that are unchanged', () => {
+    const updated = parseSchedule('9:05 AM [1] Bronze Amer. Smooth 1st Round (WT)', {
+      previousEvents: reviewedEvents,
+    });
+    expect(idOf(updated, 1)).toBe(idOf(original, 1));
+    expect(updated.events[0]?.confirmed).toBe(true);
+  });
+
+  it('follows an event that was renumbered', () => {
+    const updated = parseSchedule(
+      ['9:10 AM [7] Silver Intl. Standard (WQ)', '9:20 AM [2] Gold Amer. Rhythm (CR)'].join('\n'),
+      { previousEvents: original.events },
+    );
+    expect(idOf(updated, 7)).toBe(idOf(original, 2));
+    expect(idOf(updated, 2)).toBe(idOf(original, 3));
+  });
+
+  it('keeps the id when a name is corrected, but asks for a new review', () => {
+    const updated = parseSchedule('9:10 AM [2] Silver Intl. Standard (WTQ)', {
+      previousEvents: reviewedEvents,
+    });
+    expect(idOf(updated, 2)).toBe(idOf(original, 2));
+    expect(updated.events[0]).toMatchObject({ dances: 'WTQ', confirmed: false });
+  });
+
+  it('gives new events new ids', () => {
+    const updated = parseSchedule('9:40 AM [9] Newcomer Swing', {
+      previousEvents: original.events,
+    });
+    expect(original.events.map((event) => event.eventId)).not.toContain(idOf(updated, 9));
+  });
+});
+
+describe('partnership rows', () => {
   it('reads tab-separated rows, defaulting a missing follow to TBA', () => {
-    expect(
-      parseEntries(
-        'Chris\tBrooke\tBronze\tBronze I. Latin (CR), Bronze A. Smooth (WT)\nPat\t\t\tGold Intl. Tango',
-        sequentialIds(),
-      ),
-    ).toEqual([
+    const text =
+      'Chris\tBrooke\tBronze\tBronze I. Latin (CR), Bronze A. Smooth (WT)\nPat\t\t\tGold Intl. Tango';
+    expect(parsePartnershipRows(text)).toEqual([
       {
-        id: 'id1',
         lead: 'Chris',
         follow: 'Brooke',
         entries: ['Bronze I. Latin (CR)', 'Bronze A. Smooth (WT)'],
-        manualMatches: [],
       },
-      { id: 'id2', lead: 'Pat', follow: 'TBA', entries: ['Gold Intl. Tango'], manualMatches: [] },
+      { lead: 'Pat', follow: 'TBA', entries: ['Gold Intl. Tango'] },
     ]);
   });
 
   it('reads space-separated rows with name notes and a level column', () => {
-    const [couple] = parseEntries('Liam (TBA) Abby Bronze, Silver Bronze I. Latin (CR)');
-    expect(couple).toMatchObject({
-      lead: 'Liam (TBA)',
-      follow: 'Abby',
-      entries: ['Bronze I. Latin (CR)'],
-    });
+    expect(parsePartnershipRows('Liam (TBA) Abby Bronze, Silver Bronze I. Latin (CR)')).toEqual([
+      { lead: 'Liam (TBA)', follow: 'Abby', entries: ['Bronze I. Latin (CR)'] },
+    ]);
   });
 
   it('matches every sample entry to a scheduled event', () => {
-    const events = buildEventCatalog(parseSchedule(sampleSchedule));
-    const couples = parseEntries(samplePartnerships);
-    expect(couples).toHaveLength(20);
+    const events = buildEventCatalog(parseSchedule(sampleSchedule).events);
+    const rows = parsePartnershipRows(samplePartnerships);
+    expect(rows).toHaveLength(20);
 
-    const misses = couples.flatMap((couple) =>
-      couple.entries
+    const misses = rows.flatMap((row) =>
+      row.entries
         .filter((entry) => matchEntry(entry, events) === null)
-        .map((entry) => `${couple.lead}/${couple.follow}: ${entry}`),
+        .map((entry) => `${row.lead}/${row.follow}: ${entry}`),
     );
     expect(misses).toEqual([]);
   });
 
   it('handles shorthand: dance order, missing style, V. Waltz', () => {
-    const events = buildEventCatalog(parseSchedule(sampleSchedule));
-    expect(matchEntry('Silver I. Standard (TF)', events)).toBe(16); // schedule lists (FT)
-    expect(matchEntry('Newcomer Swing', events)).toBe(29);
-    expect(matchEntry('Silver I. V. Waltz', events)).toBe(20);
-    expect(matchEntry('Gold I. Latin (SCRJ)', events)).toBe(37);
+    const events = buildEventCatalog(parseSchedule(sampleSchedule).events);
+    const numberOf = (entry: string) => events.get(matchEntry(entry, events) ?? '')?.eventNumber;
+    expect(numberOf('Silver I. Standard (TF)')).toBe(16); // schedule lists (FT)
+    expect(numberOf('Newcomer Swing')).toBe(29);
+    expect(numberOf('Silver I. V. Waltz')).toBe(20);
+    expect(numberOf('Gold I. Latin (SCRJ)')).toBe(37);
   });
 });
+
+function eventNumberOf(item: ScheduleItem): number[] {
+  return item.kind === 'heat' ? [item.eventNumber] : [];
+}

@@ -107,11 +107,11 @@ function TeamCallbacks({ heat, team }: { heat: Heat; team: HeatTeam }) {
   if (!heatName || !couples.length) return null;
 
   const isFirstRound = heatName.round === team.firstRound;
-  const earlierRound = previousRound(competition.rounds, heat.eventNumber, heatName.round);
+  const earlierRound = previousRound(competition.rounds, heat.eventId, heatName.round);
   const record = (coupleId: string, reachedRound: Round, eliminated: boolean) => {
     store.actions.recordCallback({
       coupleId,
-      eventNumber: heat.eventNumber,
+      eventId: heat.eventId,
       reachedRound,
       eliminated,
     });
@@ -123,7 +123,7 @@ function TeamCallbacks({ heat, team }: { heat: Heat; team: HeatTeam }) {
       <h2 class={styles.sectionTitle}>Team in this event</h2>
       <div>
         {couples.map(({ couple, status }) => {
-          const mark = competition.live.callbacks[callbackKey(couple.id, heat.eventNumber)];
+          const mark = competition.live.callbacks[callbackKey(couple.id, heat.eventId)];
           let actions;
           if (status === 'dancing' && isFirstRound) {
             actions = (

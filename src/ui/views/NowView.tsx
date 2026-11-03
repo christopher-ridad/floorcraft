@@ -68,10 +68,13 @@ function MyNextHeat() {
   const upcoming = upcomingHeatsFor(competition, dancer);
   const isAhead = ({ heat }: UpcomingHeat) => indexOf(competition, heat) > currentIndex;
   const next = upcoming.find(isAhead) ?? (currentIndex >= 0 ? undefined : upcoming[0]);
-  const dancingNow =
+  const onFloor =
     currentIndex >= 0
       ? upcoming.find(({ heat }) => indexOf(competition, heat) === currentIndex)
       : undefined;
+  // Only a confirmed heat means you're dancing; a possible one is still waiting on a callback.
+  const dancingNow = onFloor && !onFloor.isPossible ? onFloor : undefined;
+  const waitingFor = onFloor?.isPossible ? onFloor : next?.isPossible ? next : undefined;
   const title = (heat: Heat) => heatTitle(competition, heat);
   const round = (heat: Heat) => heatRound(competition, heat);
   const partner = (entry: UpcomingHeat) => partnerName(partnerOf(entry.couple, dancer));
@@ -96,17 +99,23 @@ function MyNextHeat() {
     );
   }
 
-  if (next?.isPossible) {
+  if (waitingFor) {
     const nextSure = upcoming.find((entry) => !entry.isPossible && isAhead(entry));
-    const nextAway = away(next.heat);
+    const waitingAway = away(waitingFor.heat);
     return (
       <div class={styles.me} aria-live="polite">
         <div class="muted">{dancer}, waiting on a callback</div>
-        <div class={styles.big}>{title(next.heat)}</div>
+        <div class={styles.big}>{title(waitingFor.heat)}</div>
         <div class={styles.what}>
-          If you're called back: {round(next.heat)} with {partner(next)}, heat{' '}
-          <span class="mono">{next.heat.eventNumber}</span>
-          {nextAway !== null && `, ${nextAway} heats away`}
+          {waitingFor === onFloor
+            ? `On the floor now, if you were called back: ${round(waitingFor.heat)} with ${partner(waitingFor)}`
+            : `If you're called back: ${round(waitingFor.heat)} with ${partner(waitingFor)}, heat `}
+          {waitingFor !== onFloor && (
+            <>
+              <span class="mono">{waitingFor.heat.eventNumber}</span>
+              {waitingAway !== null && `, ${waitingAway} heats away`}
+            </>
+          )}
         </div>
         {nextSure && (
           <div class={cx('muted', styles.followUp)}>
@@ -245,21 +254,31 @@ function CallbacksToEnter() {
           const record = (reachedRound: typeof callback.reachedRound, eliminated: boolean) => {
             store.actions.recordCallback({
               coupleId: callback.couple.id,
-              eventNumber: callback.eventNumber,
+              eventId: callback.eventId,
               reachedRound,
               eliminated,
             });
             view.showToast(eliminated ? 'Marked not called back.' : 'Callback saved.');
           };
           return (
-            <div class={styles.callback} key={`${callback.couple.id}_${callback.eventNumber}`}>
+            <div class={styles.callback} key={`${callback.couple.id}_${callback.eventId}`}>
               <div class={styles.question}>
+                {callback.isOverdue && <span class={styles.overdue}>Overdue</span>}
                 <b>{coupleName(callback.couple)}</b> · {heatTitle(competition, callback.dancedHeat)}
                 <br />
                 <span class="muted">
-                  Danced the {heatRound(competition, callback.dancedHeat)}. Called back to the{' '}
-                  {heatRound(competition, callback.nextHeat)}? (heat at{' '}
-                  {formatClockTime(estimatedMinutes(competition, callback.nextHeat.id))})
+                  Danced the {heatRound(competition, callback.dancedHeat)}.{' '}
+                  {callback.isOverdue ? (
+                    <>
+                      The {heatRound(competition, callback.nextHeat)} has started. Were they called
+                      back?
+                    </>
+                  ) : (
+                    <>
+                      Called back to the {heatRound(competition, callback.nextHeat)}? (heat at{' '}
+                      {formatClockTime(estimatedMinutes(competition, callback.nextHeat.id))})
+                    </>
+                  )}
                 </span>
               </div>
               <div class={styles.answers}>

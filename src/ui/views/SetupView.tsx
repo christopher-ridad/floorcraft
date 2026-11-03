@@ -1,19 +1,34 @@
 import type { ComponentChildren } from 'preact';
 import { useState } from 'preact/hooks';
 import { ALERT_THRESHOLD_CHOICES, type Preferences } from '../../app/preferences';
-import { parseEntries } from '../../domain/entries/parseEntries';
+import { parsePartnershipRows } from '../../domain/entries/parsePartnershipRows';
 import { parseSchedule } from '../../domain/schedule/parseSchedule';
 import { DancerPicker } from '../components/DancerPicker';
 import { useApp } from '../context';
 import { cx, plural } from '../format';
+import { AccountCard, BackupCard, TeamAccessCard } from './AccountCards';
 import { CouplesEditor } from './CouplesEditor';
 import styles from './SetupView.module.css';
 
 export function SetupView() {
+  const { session } = useApp();
   return (
     <>
       <h2>This phone</h2>
       <PhoneSettings />
+      <h2>Account</h2>
+      <AccountCard />
+      {session.isCaptain.value && <CaptainSetup />}
+    </>
+  );
+}
+
+/** Setting up the team and the competition. Only captains see this (and the rules enforce it). */
+function CaptainSetup() {
+  return (
+    <>
+      <h2>Team link</h2>
+      <TeamAccessCard />
       <h2>Sync</h2>
       <SyncStatus />
       <h2>Couples & entries</h2>
@@ -22,6 +37,8 @@ export function SetupView() {
       <ScheduleImport />
       <h2>Partnerships</h2>
       <PartnershipsImport />
+      <h2>Backup</h2>
+      <BackupCard />
       <h2>Reset</h2>
       <ResetLiveTracking />
     </>
@@ -104,8 +121,7 @@ function SyncStatus() {
       )}
       {mode === 'local' && (
         <div class="banner">
-          This phone is not connected to the shared sheet, so changes stay on this phone only. Sign
-          in to Claude from the shared link to sync.
+          This copy isn't connected to the team's database, so changes stay on this phone only.
         </div>
       )}
       {mode === 'connecting' && 'Connecting…'}
@@ -186,7 +202,7 @@ function ScheduleImport() {
       }
       button="Replace schedule"
       noun="heats"
-      count={(text) => parseSchedule(text).filter((item) => item.kind === 'heat').length}
+      count={(text) => parseSchedule(text).items.filter((item) => item.kind === 'heat').length}
       submit={(text) => {
         const heats = store.actions.importSchedule(text);
         return heats
@@ -207,12 +223,14 @@ function PartnershipsImport() {
       placeholder={'Chris\tBrooke\tBronze\tBronze I. Standard (WQ), Bronze A. Smooth (WT)'}
       button="Replace couples"
       noun="couples"
-      count={(text) => parseEntries(text).length}
+      count={(text) => parsePartnershipRows(text).length}
       submit={(text) => {
-        const couples = store.actions.importEntries(text);
-        return couples
-          ? `${couples} couples loaded.`
-          : 'No couples found. Each line needs a lead, a follow and at least one event.';
+        const { couples, unmatched } = store.actions.importEntries(text);
+        if (!couples)
+          return 'No couples found. Each line needs a lead, a follow and at least one event.';
+        if (!unmatched.length) return `${couples} couples loaded.`;
+        const missed = unmatched.map(({ lead, entry }) => `${lead}: ${entry}`).join('; ');
+        return `${couples} couples loaded. Not on the schedule, add by hand: ${missed}`;
       }}
     />
   );

@@ -1,0 +1,104 @@
+rules_version = '2';
+
+// Access rules for the heat sheet. See docs/design/firebase-competitions.md.
+//   Captains (Google accounts listed in the team's captainUids) set everything up.
+//   Members (phones that joined with the join code) read everything and update live tracking.
+//   Nobody else can read or write anything.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function teamDoc(t)        { return /databases/$(database)/documents/teams/$(t); }
+    function teamPath(t, rest) { return path('/databases/' + database + '/documents/teams/' + t + '/' + rest); }
+    function signedIn()        { return request.auth != null; }
+    function isGoogle()        { return request.auth.token.firebase.sign_in_provider == 'google.com'; }
+    function isCaptain(t)      { return signedIn() && exists(teamDoc(t)) && request.auth.uid in get(teamDoc(t)).data.captainUids; }
+    function isMember(t)       { return signedIn() && exists(teamPath(t, 'members/' + request.auth.uid)); }
+    function canRead(t)        { return isCaptain(t) || isMember(t); }
+    function isActive(t, c)    { return get(teamDoc(t)).data.activeCompetitionId == c; }
+    function signedBySelf()    { return request.resource.data.updatedBy == request.auth.uid; }
+
+    match /teams/{t} {
+      allow read: if canRead(t);
+      // First run only: the Google account that creates the team becomes its only captain.
+      // Afterwards the document exists, so `create` can never succeed again.
+      allow create: if signedIn() && isGoogle()
+        && request.resource.data.captainUids == [request.auth.uid];
+      // Captains edit the team, including who the captains are, but never remove the last one.
+      allow update: if isCaptain(t)
+        && request.resource.data.captainUids is list
+        && request.resource.data.captainUids.size() > 0;
+      allow delete: if false;
+
+      // The join code. Members never see it directly.
+      match /private/{doc} {
+        allow read, write: if isCaptain(t);
+      }
+
+      match /members/{uid} {
+        allow read: if canRead(t);
+        // Joining: a phone creates its own membership, unlinked, with the current join code.
+        // Captains add themselves without a code.
+        allow create: if signedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['dancerId', 'provider', 'joinedAt', 'joinCode'])
+          && request.resource.data.dancerId == null
+          && (isCaptain(t)
+              || request.resource.data.joinCode == get(teamPath(t, 'private/join')).data.code);
+        // A member may only link themselves to a dancer they hold the claim for (or unlink).
+        allow update: if isCaptain(t) || (signedIn() && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dancerId', 'provider'])
+          && (request.resource.data.dancerId == null
+              || getAfter(teamPath(t, 'claims/' + request.resource.data.dancerId)).data.uid == uid));
+        allow delete: if isCaptain(t) || (signedIn() && request.auth.uid == uid);
+      }
+
+      // One phone per dancer: `create` fails if someone already holds the claim.
+      match /claims/{dancerId} {
+        allow read: if canRead(t);
+        allow create: if canRead(t)
+          && request.resource.data.keys().hasOnly(['uid'])
+          && request.resource.data.uid == request.auth.uid
+          && exists(teamPath(t, 'dancers/' + dancerId));
+        allow delete: if isCaptain(t) || (signedIn() && resource.data.uid == request.auth.uid);
+      }
+
+      match /dancers/{id} {
+        allow read: if canRead(t);
+        allow write: if isCaptain(t);
+      }
+
+      match /partnerships/{id} {
+        allow read: if canRead(t);
+        allow write: if isCaptain(t);
+      }
+
+      match /competitions/{c} {
+        allow read: if canRead(t);
+        allow write: if isCaptain(t);
+
+        match /schedule/{doc} {
+          allow read: if canRead(t);
+          allow write: if isCaptain(t);
+        }
+
+        match /entries/{partnershipId} {
+          allow read: if canRead(t);
+          allow write: if isCaptain(t);
+        }
+
+        // Live tracking: anyone on the team, only for the active competition, and every write
+        // records who made it.
+        match /live/{doc} {
+          allow read: if canRead(t);
+          allow create, update: if canRead(t) && isActive(t, c) && signedBySelf();
+          allow delete: if isCaptain(t);
+        }
+
+        match /callbacks/{key} {
+          allow read: if canRead(t);
+          allow create, update: if canRead(t) && isActive(t, c) && signedBySelf();
+          allow delete: if canRead(t) && isActive(t, c);
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,878 @@
+{
+  "heats": [
+    {
+      "id": "b1_v6yc",
+      "label": "American Style Smooth Events",
+      "t": "8:30 AM"
+    },
+    {
+      "ev": 1,
+      "id": "h2_2hdp",
+      "name": "Bronze Amer. Smooth 1st Round (WT)",
+      "t": "8:37 AM"
+    },
+    {
+      "ev": 2,
+      "id": "h3_jmln",
+      "name": "Bronze Amer. Smooth 1st Round (FV)",
+      "t": "8:48 AM"
+    },
+    {
+      "ev": 1,
+      "id": "h4_nmdn",
+      "name": "Bronze Amer. Smooth Second Round (WT)",
+      "t": "8:55 AM"
+    },
+    {
+      "ev": 2,
+      "id": "h5_09at",
+      "name": "Bronze Amer. Smooth Quarter (FV)",
+      "t": "9:02 AM"
+    },
+    {
+      "ev": 1,
+      "id": "h6_et1e",
+      "name": "Bronze Amer. Smooth Quarter (WT)",
+      "t": "9:06 AM"
+    },
+    {
+      "ev": 3,
+      "id": "h7_w5i4",
+      "name": "Gold Amer. Smooth Semi-Final (WTFV)",
+      "t": "9:10 AM"
+    },
+    {
+      "ev": 2,
+      "id": "h8_8kn4",
+      "name": "Bronze Amer. Smooth Semi-Final (FV)",
+      "t": "9:17 AM"
+    },
+    {
+      "ev": 1,
+      "id": "h9_iur0",
+      "name": "Bronze Amer. Smooth Semi-Final (WT)",
+      "t": "9:21 AM"
+    },
+    {
+      "ev": 3,
+      "id": "h10_enhg",
+      "name": "Gold Amer. Smooth Final (WTFV)",
+      "t": "9:24 AM"
+    },
+    {
+      "ev": 2,
+      "id": "h11_nu9n",
+      "name": "Bronze Amer. Smooth Final (FV)",
+      "t": "9:32 AM"
+    },
+    {
+      "ev": 1,
+      "id": "h12_lelp",
+      "name": "Bronze Amer. Smooth Final (WT)",
+      "t": "9:35 AM"
+    },
+    {
+      "ev": 4,
+      "id": "h13_ldje",
+      "name": "Newcomer Amer. Waltz 1st Round",
+      "t": "9:39 AM"
+    },
+    {
+      "ev": 5,
+      "id": "h14_eq9y",
+      "name": "Newcomer Amer. Tango 1st Round",
+      "t": "9:43 AM"
+    },
+    {
+      "ev": 6,
+      "id": "h15_stt7",
+      "name": "Newcomer Amer. Foxtrot 1st Round",
+      "t": "9:46 AM"
+    },
+    {
+      "ev": 7,
+      "id": "h16_nkr0",
+      "name": "Silver Amer. Smooth 1st Round (WT)",
+      "t": "9:50 AM"
+    },
+    {
+      "ev": 8,
+      "id": "h17_13ep",
+      "name": "Silver Amer. Smooth 1st Round (FV)",
+      "t": "9:57 AM"
+    },
+    {
+      "ev": 4,
+      "id": "h18_0pvz",
+      "name": "Newcomer Amer. Waltz Quarter",
+      "t": "10:05 AM"
+    },
+    {
+      "ev": 5,
+      "id": "h19_eajd",
+      "name": "Newcomer Amer. Tango Quarter",
+      "t": "10:06 AM"
+    },
+    {
+      "ev": 6,
+      "id": "h20_o5iw",
+      "name": "Newcomer Amer. Foxtrot Quarter",
+      "t": "10:08 AM"
+    },
+    {
+      "ev": 7,
+      "id": "h21_odwx",
+      "name": "Silver Amer. Smooth Quarter (WT)",
+      "t": "10:10 AM"
+    },
+    {
+      "ev": 8,
+      "id": "h22_ect9",
+      "name": "Silver Amer. Smooth Quarter (FV)",
+      "t": "10:14 AM"
+    },
+    {
+      "ev": 4,
+      "id": "h23_8vbs",
+      "name": "Newcomer Amer. Waltz Semi-Final",
+      "t": "10:17 AM"
+    },
+    {
+      "ev": 5,
+      "id": "h24_tead",
+      "name": "Newcomer Amer. Tango Semi-Final",
+      "t": "10:19 AM"
+    },
+    {
+      "ev": 6,
+      "id": "h25_3vzi",
+      "name": "Newcomer Amer. Foxtrot Semi-Final",
+      "t": "10:21 AM"
+    },
+    {
+      "ev": 9,
+      "id": "h26_dtjs",
+      "name": "Pre-Champ Amer. Smooth (WTFV)",
+      "t": "10:23 AM"
+    },
+    {
+      "ev": 7,
+      "id": "h27_0mkc",
+      "name": "Silver Amer. Smooth Semi-Final (WT)",
+      "t": "10:30 AM"
+    },
+    {
+      "ev": 8,
+      "id": "h28_uc3h",
+      "name": "Silver Amer. Smooth Semi-Final (FV)",
+      "t": "10:34 AM"
+    },
+    {
+      "ev": 7,
+      "id": "h29_i7kw",
+      "name": "Silver Amer. Smooth Final (WT)",
+      "t": "10:38 AM"
+    },
+    {
+      "ev": 8,
+      "id": "h30_9gg4",
+      "name": "Silver Amer. Smooth Final (FV)",
+      "t": "10:41 AM"
+    },
+    {
+      "ev": 10,
+      "id": "h31_hi36",
+      "name": "Novice Amer. Smooth Semi-Final (WTF)",
+      "t": "10:45 AM"
+    },
+    {
+      "ev": 4,
+      "id": "h32_96ks",
+      "name": "Newcomer Amer. Waltz Final",
+      "t": "10:50 AM"
+    },
+    {
+      "ev": 5,
+      "id": "h33_t9vr",
+      "name": "Newcomer Amer. Tango Final",
+      "t": "10:52 AM"
+    },
+    {
+      "ev": 6,
+      "id": "h34_qv9d",
+      "name": "Newcomer Amer. Foxtrot Final",
+      "t": "10:54 AM"
+    },
+    {
+      "ev": 11,
+      "id": "h35_1kn3",
+      "name": "Championship Amer. Smooth (WTFV)",
+      "t": "10:56 AM"
+    },
+    {
+      "ev": 10,
+      "id": "h36_q2nd",
+      "name": "Novice Amer. Smooth Final (WTF)",
+      "t": "11:03 AM"
+    },
+    {
+      "id": "b37_1e2v",
+      "label": "Smooth Awards",
+      "t": "11:09 AM"
+    },
+    {
+      "id": "b38_s2zk",
+      "label": "International Style Standard Events",
+      "t": "11:24 AM"
+    },
+    {
+      "ev": 12,
+      "id": "h39_yddf",
+      "name": "Bronze Intl. Standard 1st Round (WQ)",
+      "t": "11:24 AM"
+    },
+    {
+      "ev": 13,
+      "id": "h40_rwev",
+      "name": "Bronze Intl. Standard 1st Round (TF)",
+      "t": "11:35 AM"
+    },
+    {
+      "ev": 14,
+      "id": "h41_eaz0",
+      "name": "Gold Intl. Standard Quarter (WTVFQ)",
+      "t": "11:42 AM"
+    },
+    {
+      "ev": 12,
+      "id": "h42_escq",
+      "name": "Bronze Intl. Standard Quarter (WQ)",
+      "t": "11:51 AM"
+    },
+    {
+      "ev": 13,
+      "id": "h43_cmo1",
+      "name": "Bronze Intl. Standard Quarter (TF)",
+      "t": "11:55 AM"
+    },
+    {
+      "ev": 14,
+      "id": "h44_ujup",
+      "name": "Gold Intl. Standard Semi-Final (WTVFQ)",
+      "t": "11:59 AM"
+    },
+    {
+      "ev": 12,
+      "id": "h45_9z1u",
+      "name": "Bronze Intl. Standard Semi-Final (WQ)",
+      "t": "12:08 PM"
+    },
+    {
+      "ev": 13,
+      "id": "h46_3wvp",
+      "name": "Bronze Intl. Standard Semi-Final (TF)",
+      "t": "12:11 PM"
+    },
+    {
+      "ev": 14,
+      "id": "h47_yihk",
+      "name": "Gold Intl. Standard Final (WTVFQ)",
+      "t": "12:15 PM"
+    },
+    {
+      "ev": 12,
+      "id": "h48_t5qz",
+      "name": "Bronze Intl. Standard Final (WQ)",
+      "t": "12:24 PM"
+    },
+    {
+      "ev": 13,
+      "id": "h49_gi2a",
+      "name": "Bronze Intl. Standard Final (TF)",
+      "t": "12:28 PM"
+    },
+    {
+      "ev": 15,
+      "id": "h50_dufk",
+      "name": "Silver Intl. Standard 1st Round (WQ)",
+      "t": "12:32 PM"
+    },
+    {
+      "ev": 16,
+      "id": "h51_4my5",
+      "name": "Silver Intl. Standard 1st Round (FT)",
+      "t": "12:39 PM"
+    },
+    {
+      "ev": 17,
+      "id": "h52_pm5z",
+      "name": "Newcomer Intl. Waltz Quarter",
+      "t": "12:46 PM"
+    },
+    {
+      "ev": 18,
+      "id": "h53_7wll",
+      "name": "Newcomer Intl. Tango Quarter",
+      "t": "12:50 PM"
+    },
+    {
+      "ev": 19,
+      "id": "h54_m4kl",
+      "name": "Newcomer Intl. Quickstep Quarter",
+      "t": "12:52 PM"
+    },
+    {
+      "ev": 15,
+      "id": "h55_84ca",
+      "name": "Silver Intl. Standard Quarter (WQ)",
+      "t": "12:54 PM"
+    },
+    {
+      "ev": 16,
+      "id": "h56_ah34",
+      "name": "Silver Intl. Standard Quarter (FT)",
+      "t": "12:57 PM"
+    },
+    {
+      "ev": 20,
+      "id": "h57_nktv",
+      "name": "Silver Intl. V. Waltz Quarter",
+      "t": "1:01 PM"
+    },
+    {
+      "ev": 21,
+      "id": "h58_tyzf",
+      "name": "Pre-Champ Intl. Standard (WTFQ)",
+      "t": "1:03 PM"
+    },
+    {
+      "ev": 17,
+      "id": "h59_pu32",
+      "name": "Newcomer Intl. Waltz Semi-Final",
+      "t": "1:10 PM"
+    },
+    {
+      "ev": 18,
+      "id": "h60_kmoc",
+      "name": "Newcomer Intl. Tango Semi-Final",
+      "t": "1:12 PM"
+    },
+    {
+      "ev": 19,
+      "id": "h61_hsim",
+      "name": "Newcomer Intl. Quickstep Semi-Final",
+      "t": "1:14 PM"
+    },
+    {
+      "ev": 15,
+      "id": "h62_kxzk",
+      "name": "Silver Intl. Standard Semi-Final (WQ)",
+      "t": "1:16 PM"
+    },
+    {
+      "ev": 16,
+      "id": "h63_uae5",
+      "name": "Silver Intl. Standard Semi-Final (FT)",
+      "t": "1:19 PM"
+    },
+    {
+      "ev": 20,
+      "id": "h64_waac",
+      "name": "Silver Intl. V. Waltz Semi-Final",
+      "t": "1:23 PM"
+    },
+    {
+      "ev": 22,
+      "id": "h65_n8f8",
+      "name": "Novice Intl. Standard Semi-Final (WFQ)",
+      "t": "1:25 PM"
+    },
+    {
+      "ev": 15,
+      "id": "h66_r6io",
+      "name": "Silver Intl. Standard Final (WQ)",
+      "t": "1:30 PM"
+    },
+    {
+      "ev": 16,
+      "id": "h67_hoah",
+      "name": "Silver Intl. Standard Final (FT)",
+      "t": "1:34 PM"
+    },
+    {
+      "ev": 20,
+      "id": "h68_2fzq",
+      "name": "Silver Intl. V. Waltz Final",
+      "t": "1:38 PM"
+    },
+    {
+      "ev": 17,
+      "id": "h69_4mtg",
+      "name": "Newcomer Intl. Waltz Final",
+      "t": "1:39 PM"
+    },
+    {
+      "ev": 18,
+      "id": "h70_6d0t",
+      "name": "Newcomer Intl. Tango Final",
+      "t": "1:41 PM"
+    },
+    {
+      "ev": 19,
+      "id": "h71_pxfm",
+      "name": "Newcomer Intl. Quickstep Final",
+      "t": "1:43 PM"
+    },
+    {
+      "ev": 23,
+      "id": "h72_6fe9",
+      "name": "Championship Intl. Standard (WTVFQ)",
+      "t": "1:45 PM"
+    },
+    {
+      "ev": 22,
+      "id": "h73_x6ho",
+      "name": "Novice Intl. Standard Final (WFQ)",
+      "t": "1:54 PM"
+    },
+    {
+      "id": "b74_0vsg",
+      "label": "Standard Awards",
+      "t": "2:00 PM"
+    },
+    {
+      "id": "b75_53nv",
+      "label": "American Style Rhythm",
+      "t": "2:15 PM"
+    },
+    {
+      "ev": 24,
+      "id": "h76_gtqn",
+      "name": "Bronze Amer. Rhythm 1st Round (CR)",
+      "t": "2:15 PM"
+    },
+    {
+      "ev": 25,
+      "id": "h77_d0i6",
+      "name": "Bronze Amer. Rhythm 1st Round (SM)",
+      "t": "2:26 PM"
+    },
+    {
+      "ev": 24,
+      "id": "h78_hwzp",
+      "name": "Bronze Amer. Rhythm Second Round (CR)",
+      "t": "2:33 PM"
+    },
+    {
+      "ev": 25,
+      "id": "h79_7n63",
+      "name": "Bronze Amer. Rhythm Quarter (SM)",
+      "t": "2:40 PM"
+    },
+    {
+      "ev": 24,
+      "id": "h80_t0e9",
+      "name": "Bronze Amer. Rhythm Quarter (CR)",
+      "t": "2:44 PM"
+    },
+    {
+      "ev": 26,
+      "id": "h81_72fx",
+      "name": "Gold Amer. Rhythm Semi-Final (CRSM)",
+      "t": "2:48 PM"
+    },
+    {
+      "ev": 24,
+      "id": "h82_hqz4",
+      "name": "Bronze Amer. Rhythm Semi-Final (CR)",
+      "t": "2:55 PM"
+    },
+    {
+      "ev": 25,
+      "id": "h83_frsq",
+      "name": "Bronze Amer. Rhythm Semi-Final (SM)",
+      "t": "2:59 PM"
+    },
+    {
+      "ev": 26,
+      "id": "h84_gmec",
+      "name": "Gold Amer. Rhythm Final (CRSM)",
+      "t": "3:02 PM"
+    },
+    {
+      "ev": 24,
+      "id": "h85_ze9s",
+      "name": "Bronze Amer. Rhythm Final (CR)",
+      "t": "3:10 PM"
+    },
+    {
+      "ev": 25,
+      "id": "h86_4qmk",
+      "name": "Bronze Amer. Rhythm Final (SM)",
+      "t": "3:13 PM"
+    },
+    {
+      "ev": 27,
+      "id": "h87_r3j5",
+      "name": "Newcomer Amer. Cha Cha 1st Round",
+      "t": "3:17 PM"
+    },
+    {
+      "ev": 28,
+      "id": "h88_zpi5",
+      "name": "Newcomer Amer. Rumba 1st Round",
+      "t": "3:21 PM"
+    },
+    {
+      "ev": 29,
+      "id": "h89_wsyq",
+      "name": "Newcomer Amer. Swing 1st Round",
+      "t": "3:24 PM"
+    },
+    {
+      "ev": 30,
+      "id": "h90_tv05",
+      "name": "Silver Amer. Rhythm 1st Round (CR)",
+      "t": "3:28 PM"
+    },
+    {
+      "ev": 31,
+      "id": "h91_7jh0",
+      "name": "Silver Amer. Rhythm 1st Round (SM)",
+      "t": "3:35 PM"
+    },
+    {
+      "ev": 27,
+      "id": "h92_959j",
+      "name": "Newcomer Amer. Cha Cha Quarter",
+      "t": "3:43 PM"
+    },
+    {
+      "ev": 28,
+      "id": "h93_hjll",
+      "name": "Newcomer Amer. Rumba Quarter",
+      "t": "3:44 PM"
+    },
+    {
+      "ev": 29,
+      "id": "h94_2mvv",
+      "name": "Newcomer Amer. Swing Quarter",
+      "t": "3:46 PM"
+    },
+    {
+      "ev": 30,
+      "id": "h95_oyml",
+      "name": "Silver Amer. Rhythm Quarter (CR)",
+      "t": "3:48 PM"
+    },
+    {
+      "ev": 31,
+      "id": "h96_hgv9",
+      "name": "Silver Amer. Rhythm Quarter (SM)",
+      "t": "3:52 PM"
+    },
+    {
+      "ev": 32,
+      "id": "h97_szkb",
+      "name": "Syllabus Amer. Bolero Quarter",
+      "t": "3:55 PM"
+    },
+    {
+      "ev": 27,
+      "id": "h98_kabn",
+      "name": "Newcomer Amer. Cha Cha Semi-Final",
+      "t": "3:57 PM"
+    },
+    {
+      "ev": 28,
+      "id": "h99_0jx9",
+      "name": "Newcomer Amer. Rumba Semi-Final",
+      "t": "3:59 PM"
+    },
+    {
+      "ev": 29,
+      "id": "h100_4uxr",
+      "name": "Newcomer Amer. Swing Semi-Final",
+      "t": "4:01 PM"
+    },
+    {
+      "ev": 30,
+      "id": "h101_kgef",
+      "name": "Silver Amer. Rhythm Semi-Final (CR)",
+      "t": "4:03 PM"
+    },
+    {
+      "ev": 31,
+      "id": "h102_5tcg",
+      "name": "Silver Amer. Rhythm Semi-Final (SM)",
+      "t": "4:06 PM"
+    },
+    {
+      "ev": 32,
+      "id": "h103_v6f0",
+      "name": "Syllabus Amer. Bolero Semi-Final",
+      "t": "4:10 PM"
+    },
+    {
+      "ev": 33,
+      "id": "h104_g62j",
+      "name": "Novice Amer. Rhythm (CRS)",
+      "t": "4:12 PM"
+    },
+    {
+      "ev": 27,
+      "id": "h105_awem",
+      "name": "Newcomer Amer. Cha Cha Final",
+      "t": "4:17 PM"
+    },
+    {
+      "ev": 28,
+      "id": "h106_m2xa",
+      "name": "Newcomer Amer. Rumba Final",
+      "t": "4:19 PM"
+    },
+    {
+      "ev": 29,
+      "id": "h107_bhfm",
+      "name": "Newcomer Amer. Swing Final",
+      "t": "4:21 PM"
+    },
+    {
+      "ev": 30,
+      "id": "h108_kg4g",
+      "name": "Silver Amer. Rhythm Final (CR)",
+      "t": "4:23 PM"
+    },
+    {
+      "ev": 31,
+      "id": "h109_w9zu",
+      "name": "Silver Amer. Rhythm Final (SM)",
+      "t": "4:27 PM"
+    },
+    {
+      "ev": 32,
+      "id": "h110_hg01",
+      "name": "Syllabus Amer. Bolero Final",
+      "t": "4:30 PM"
+    },
+    {
+      "ev": 34,
+      "id": "h111_abec",
+      "name": "Pre-Champ Amer. Rhythm (CRSB)",
+      "t": "4:32 PM"
+    },
+    {
+      "id": "b112_1uje",
+      "label": "Rhythm Awards",
+      "t": "4:39 PM"
+    },
+    {
+      "id": "b113_uzii",
+      "label": "International Style Latin Events",
+      "t": "4:54 PM"
+    },
+    {
+      "ev": 35,
+      "id": "h114_d62x",
+      "name": "Bronze Intl. Latin 1st Round (CR)",
+      "t": "4:54 PM"
+    },
+    {
+      "ev": 36,
+      "id": "h115_119r",
+      "name": "Bronze Intl. Latin 1st Round (SJ)",
+      "t": "5:05 PM"
+    },
+    {
+      "ev": 35,
+      "id": "h116_s9u1",
+      "name": "Bronze Intl. Latin Quarter (CR)",
+      "t": "5:16 PM"
+    },
+    {
+      "ev": 36,
+      "id": "h117_fki9",
+      "name": "Bronze Intl. Latin Quarter (SJ)",
+      "t": "5:20 PM"
+    },
+    {
+      "ev": 37,
+      "id": "h118_er1p",
+      "name": "Gold Intl. Latin Semi-Final (SCRJ)",
+      "t": "5:24 PM"
+    },
+    {
+      "ev": 35,
+      "id": "h119_4z76",
+      "name": "Bronze Intl. Latin Semi-Final (CR)",
+      "t": "5:31 PM"
+    },
+    {
+      "ev": 36,
+      "id": "h120_nzg5",
+      "name": "Bronze Intl. Latin Semi-Final (SJ)",
+      "t": "5:35 PM"
+    },
+    {
+      "ev": 37,
+      "id": "h121_63qw",
+      "name": "Gold Intl. Latin Final (SCRJ)",
+      "t": "5:38 PM"
+    },
+    {
+      "ev": 35,
+      "id": "h122_v9sq",
+      "name": "Bronze Intl. Latin Final (CR)",
+      "t": "5:46 PM"
+    },
+    {
+      "ev": 36,
+      "id": "h123_2aut",
+      "name": "Bronze Intl. Latin Final (SJ)",
+      "t": "5:49 PM"
+    },
+    {
+      "ev": 38,
+      "id": "h124_m5fj",
+      "name": "Silver Intl. Latin 1st Round (CR)",
+      "t": "5:53 PM"
+    },
+    {
+      "ev": 39,
+      "id": "h125_q01x",
+      "name": "Silver Intl. Latin 1st Round (SJ)",
+      "t": "6:00 PM"
+    },
+    {
+      "ev": 40,
+      "id": "h126_x8xx",
+      "name": "Syllabus Intl. Paso Doble Quarter",
+      "t": "6:08 PM"
+    },
+    {
+      "ev": 38,
+      "id": "h127_jtc2",
+      "name": "Silver Intl. Latin Quarter (CR)",
+      "t": "6:10 PM"
+    },
+    {
+      "ev": 39,
+      "id": "h128_szqo",
+      "name": "Silver Intl. Latin Quarter (SJ)",
+      "t": "6:13 PM"
+    },
+    {
+      "ev": 40,
+      "id": "h129_mc7c",
+      "name": "Syllabus Intl. Paso Doble Semi-Final",
+      "t": "6:17 PM"
+    },
+    {
+      "ev": 41,
+      "id": "h130_yw2f",
+      "name": "Newcomer Intl. Cha Cha Quarter",
+      "t": "6:19 PM"
+    },
+    {
+      "ev": 42,
+      "id": "h131_o9i7",
+      "name": "Newcomer Intl. Rumba Quarter",
+      "t": "6:22 PM"
+    },
+    {
+      "ev": 43,
+      "id": "h132_9s5n",
+      "name": "Newcomer Intl. Jive Quarter",
+      "t": "6:26 PM"
+    },
+    {
+      "ev": 38,
+      "id": "h133_jbzk",
+      "name": "Silver Intl. Latin Semi-Final (CR)",
+      "t": "6:30 PM"
+    },
+    {
+      "ev": 39,
+      "id": "h134_wn33",
+      "name": "Silver Intl. Latin Semi-Final (SJ)",
+      "t": "6:33 PM"
+    },
+    {
+      "ev": 40,
+      "id": "h135_licp",
+      "name": "Syllabus Intl. Paso Doble Final",
+      "t": "6:37 PM"
+    },
+    {
+      "ev": 44,
+      "id": "h136_6dsa",
+      "name": "Pre-Champ Intl. Latin (SCRJ)",
+      "t": "6:39 PM"
+    },
+    {
+      "ev": 41,
+      "id": "h137_j5z2",
+      "name": "Newcomer Intl. Cha Cha Semi-Final",
+      "t": "6:46 PM"
+    },
+    {
+      "ev": 42,
+      "id": "h138_k471",
+      "name": "Newcomer Intl. Rumba Semi-Final",
+      "t": "6:48 PM"
+    },
+    {
+      "ev": 43,
+      "id": "h139_regi",
+      "name": "Newcomer Intl. Jive Semi-Final",
+      "t": "6:50 PM"
+    },
+    {
+      "ev": 38,
+      "id": "h140_svkz",
+      "name": "Silver Intl. Latin Final (CR)",
+      "t": "6:52 PM"
+    },
+    {
+      "ev": 39,
+      "id": "h141_7sth",
+      "name": "Silver Intl. Latin Final (SJ)",
+      "t": "6:55 PM"
+    },
+    {
+      "ev": 41,
+      "id": "h142_7595",
+      "name": "Newcomer Intl. Cha Cha Final",
+      "t": "6:59 PM"
+    },
+    {
+      "ev": 42,
+      "id": "h143_rsdw",
+      "name": "Newcomer Intl. Rumba Final",
+      "t": "7:01 PM"
+    },
+    {
+      "ev": 43,
+      "id": "h144_oqjh",
+      "name": "Newcomer Intl. Jive Final",
+      "t": "7:03 PM"
+    },
+    {
+      "ev": 45,
+      "id": "h145_ygp1",
+      "name": "Novice Intl. Latin (SCR)",
+      "t": "7:05 PM"
+    },
+    {
+      "ev": 46,
+      "id": "h146_gxt3",
+      "name": "Championship Intl. Latin (SCRPJ)",
+      "t": "7:10 PM"
+    },
+    {
+      "id": "b147_sop9",
+      "label": "Latin Awards",
+      "t": "7:19 PM"
+    }
+  ]
+}

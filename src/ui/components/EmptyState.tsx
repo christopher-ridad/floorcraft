@@ -28,7 +28,7 @@ export function EmptyState({ title, children, linkToSetup = false }: EmptyStateP
 /** Shown on tabs that need a schedule before there is one. */
 export function NoSchedule() {
   const { loaded } = useApp().store;
-  return loaded.value.schedule ? (
+  return loaded.value.competition ? (
     <EmptyState title="No schedule yet" linkToSetup>
       Paste the heat list in Setup to build everyone's schedule.
     </EmptyState>

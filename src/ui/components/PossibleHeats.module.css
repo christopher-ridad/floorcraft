@@ -1,0 +1,78 @@
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  align-items: center;
+  justify-content: space-between;
+}
+.keys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+.sure {
+  background: var(--surface);
+  border: 1.5px solid var(--ink);
+}
+.maybe {
+  border: 1.5px dashed var(--muted);
+  background: repeating-linear-gradient(135deg, transparent 0 3px, var(--line) 3px 4px);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.knob {
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--line);
+  position: relative;
+  flex: none;
+  transition: background 0.15s;
+}
+.knob::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  transition: transform 0.15s;
+}
+.toggle[aria-checked='true'] .knob {
+  background: var(--accent);
+}
+.toggle[aria-checked='true'] .knob::after {
+  transform: translateX(14px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .knob,
+  .knob::after {
+    transition: none;
+  }
+}

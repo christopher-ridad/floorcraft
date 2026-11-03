@@ -2,19 +2,20 @@
 import { cleanup, render, screen, within } from '@testing-library/preact';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import type { CompetitionDocuments } from '../../src/app/ports';
 import type { Preferences } from '../../src/app/preferences';
-import { createAppStore, EMPTY_LIVE } from '../../src/app/store';
+import { createAppStore } from '../../src/app/store';
+import type { FloorState } from '../../src/domain/types';
 import { memoryStorage } from '../../src/infra/storage/keyValueStorage';
 import { App } from '../../src/ui/App';
 import { createViewState, type Tab } from '../../src/ui/viewState';
-import { at, couples, schedule } from '../domain/fixture';
+import { at } from '../domain/fixture';
 import {
+  COMPETITION_ID,
   fakeAlertOutput,
-  fakeConnector,
   fakePreferences,
+  fakeRepository,
   fakeWakeLock,
-  FakeSync,
+  fixtureBackup,
 } from '../app/fakes';
 
 beforeAll(() => {
@@ -26,13 +27,13 @@ afterEach(cleanup);
 interface Options {
   tab?: Tab;
   preferences?: Partial<Preferences>;
-  live?: CompetitionDocuments['live'];
+  floor?: FloorState;
 }
 
-async function renderApp({ tab = 'now', preferences, live = EMPTY_LIVE }: Options = {}) {
-  const shared = new FakeSync('shared', { schedule, entries: couples, live });
+async function renderApp({ tab = 'now', preferences, floor }: Options = {}) {
+  const backend = fakeRepository(fixtureBackup({ floor }));
   const store = createAppStore({
-    sync: fakeConnector(Promise.resolve(shared)).connector,
+    repository: backend.repository,
     preferences: fakePreferences(preferences).store,
     clock: { now: () => at(9, 20) },
     alertOutput: fakeAlertOutput().output,
@@ -44,12 +45,11 @@ async function renderApp({ tab = 'now', preferences, live = EMPTY_LIVE }: Option
   });
   const view = createViewState(memoryStorage({ 'floorcraft:tab': tab }));
   render(<App store={store} view={view} />);
-  await store.start();
-  return { store, shared, user: userEvent.setup() };
+  store.start();
+  return { store, backend, user: userEvent.setup() };
 }
 
-const onTheFloor = (itemId: string, setAt = at(9, 0)) => ({
-  ...EMPTY_LIVE,
+const onTheFloor = (itemId: string, setAt = at(9, 0)): FloorState => ({
   currentItemId: itemId,
   currentSetAt: setAt,
 });
@@ -74,24 +74,24 @@ describe('Now tab', () => {
   });
 
   it('counts down the heats and alerts when you are on deck', async () => {
-    const { shared } = await renderApp({ preferences: { dancer: 'Chris' } });
-    shared.emit('live', onTheFloor('h0'));
+    const { backend } = await renderApp({ preferences: { dancer: 'Chris' } });
+    await backend.otherPhone.saveFloor(COMPETITION_ID, onTheFloor('h0'));
 
     expect(await screen.findByText('On deck')).toBeTruthy();
     expect(screen.getByRole('status').textContent).toBe("You're on deck. Next heat is yours.");
   });
 
   it('says when you are waiting on a callback', async () => {
-    await renderApp({ preferences: { dancer: 'Jo' }, live: onTheFloor('h2') });
+    await renderApp({ preferences: { dancer: 'Jo' }, floor: onTheFloor('h2') });
     expect(await screen.findByText('Jo, waiting on a callback')).toBeTruthy();
   });
 
   it('asks for callbacks once a round is danced, and records them', async () => {
-    const { store, user } = await renderApp({ live: onTheFloor('h4') });
+    const { store, user } = await renderApp({ floor: onTheFloor('h4') });
     expect(await screen.findByText('Callbacks to enter · 2')).toBeTruthy();
 
     await user.click(screen.getAllByRole('button', { name: 'Called back' })[0] as HTMLElement);
-    expect(store.live.value.callbacks).toEqual({ c1_1: { reachedRound: 4, eliminated: false } });
+    expect(store.live.value.callbacks).toEqual({ c1_e1: { reachedRound: 4, eliminated: false } });
     expect(screen.getByRole('status').textContent).toBe('Callback saved.');
     // Chris & Brooke danced the semi already, so they're now asked about the final, which
     // sorts them after Sam & Jo.
@@ -99,13 +99,13 @@ describe('Now tab', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Not called back' })[0] as HTMLElement);
     expect(store.live.value.callbacks).toMatchObject({
-      c3_1: { reachedRound: 1, eliminated: true },
+      c3_e1: { reachedRound: 1, eliminated: true },
     });
     expect(await screen.findByText('Callbacks to enter · 1')).toBeTruthy();
   });
 
   it('moves the floor with Next and Back, showing the pace', async () => {
-    const { user } = await renderApp({ live: onTheFloor('h3', at(9, 5)) });
+    const { user } = await renderApp({ floor: onTheFloor('h3', at(9, 5)) });
     expect(await screen.findByText('10 min behind')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Next heat is up' }));
@@ -153,14 +153,14 @@ describe('heat sheet', () => {
   });
 
   it('records a callback for one couple and can undo it', async () => {
-    const { store, user } = await renderApp({ tab: 'schedule', live: onTheFloor('h3') });
+    const { store, user } = await renderApp({ tab: 'schedule', floor: onTheFloor('h3') });
     await user.click((await screen.findAllByText('Bronze Amer. Smooth (WT)'))[1] as HTMLElement);
     const sheet = screen.getByRole('dialog');
 
     await user.click(
       within(sheet).getAllByRole('button', { name: 'Called back' })[0] as HTMLElement,
     );
-    expect(store.live.value.callbacks).toEqual({ c1_1: { reachedRound: 4, eliminated: false } });
+    expect(store.live.value.callbacks).toEqual({ c1_e1: { reachedRound: 4, eliminated: false } });
 
     await user.click(await within(sheet).findByRole('button', { name: 'Undo' }));
     expect(store.live.value.callbacks).toEqual({});
@@ -210,16 +210,20 @@ describe('Setup tab', () => {
     expect(screen.getByRole('status').textContent).toBe('Schedule replaced: 1 heats.');
   });
 
-  it('flags unmatched entries and lets you pick the event', async () => {
+  it('flags entries for events no longer on the schedule, and edits a couple’s events', async () => {
     const { store, user } = await renderApp({ tab: 'setup' });
-    expect(await screen.findByText(/1 entry doesn’t match any heat/)).toBeTruthy();
+    expect(await screen.findByText(/1 entry is for events no longer on the schedule/)).toBeTruthy();
 
     await user.click(screen.getByText('Pat & TBA'));
     await user.selectOptions(
-      screen.getByLabelText('Pick event for Gold Intl. Tango'),
+      screen.getAllByLabelText('Add event')[2] as HTMLElement,
       '3 · Newcomer Intl. Cha Cha',
     );
-    expect(store.competition.value.unmatchedEntries).toEqual([]);
+    await user.click(screen.getAllByRole('button', { name: 'Add' })[2] as HTMLElement);
+    await user.click(screen.getByRole('button', { name: 'Remove missing event' }));
+
+    expect(store.competition.value.entries['c4']).toEqual(['e3']);
+    expect(store.competition.value.missingEntries).toEqual([]);
   });
 
   it('shows that the sheet is shared', async () => {

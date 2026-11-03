@@ -1,66 +1,129 @@
+import { BACKUP_FORMAT, BACKUP_VERSION, type TeamBackup } from '../../src/app/backup';
 import type {
   AlertOutput,
-  CompetitionDocuments,
-  CompetitionSync,
-  DocumentName,
+  HeatSheetRepository,
   PreferencesStore,
   ScreenWakeLock,
-  SyncConnector,
   SyncErrorCode,
   SyncFailure,
 } from '../../src/app/ports';
 import { DEFAULT_PREFERENCES, type Preferences } from '../../src/app/preferences';
+import type { Dancer, Entries, FloorState, Partnership } from '../../src/domain/types';
+import { localRepository } from '../../src/infra/local/localRepository';
+import { memoryStorage } from '../../src/infra/storage/keyValueStorage';
+import { couples, entries, events, schedule } from '../domain/fixture';
 
-type Listener = (value: unknown) => void;
-type ErrorListener = (code: SyncErrorCode) => void;
+export const COMPETITION_ID = 'classic';
 
-/** An in-memory backend. Tests push remote changes with `emit` and inspect `saved`. */
-export class FakeSync implements CompetitionSync {
-  readonly saved: [DocumentName, unknown][] = [];
-  failSavesWith: SyncFailure | null = null;
-  private readonly listeners = new Map<DocumentName, { change: Listener; error: ErrorListener }>();
+/** The domain fixture as a team: dancers and partnerships named as in the fixture's couples. */
+export const fixtureDancers: Dancer[] = [
+  { id: 'chris', name: 'Chris', active: true },
+  { id: 'brooke', name: 'Brooke', active: true },
+  { id: 'alex', name: 'Alex (TBA)', active: true },
+  { id: 'sam', name: 'Sam', active: true },
+  { id: 'jo', name: 'Jo', active: true },
+  { id: 'pat', name: 'Pat', active: true },
+];
+export const fixturePartnerships: Partnership[] = [
+  { id: 'c1', leadId: 'chris', followId: 'brooke', active: true },
+  { id: 'c2', leadId: 'alex', followId: 'sam', active: true },
+  { id: 'c3', leadId: 'sam', followId: 'jo', active: true },
+  { id: 'c4', leadId: 'pat', followId: null, active: true },
+];
 
-  constructor(
-    readonly mode: 'shared' | 'local',
-    private readonly initial: Partial<CompetitionDocuments> = {},
-  ) {}
-
-  subscribe<Name extends DocumentName>(
-    name: Name,
-    onChange: (value: CompetitionDocuments[Name]) => void,
-    onError: ErrorListener,
-  ) {
-    this.listeners.set(name, { change: onChange as Listener, error: onError });
-    const value = this.initial[name];
-    if (value !== undefined) onChange(value as CompetitionDocuments[Name]);
-    return () => void this.listeners.delete(name);
-  }
-
-  async save<Name extends DocumentName>(name: Name, value: CompetitionDocuments[Name]) {
-    if (this.failSavesWith) throw this.failSavesWith;
-    this.saved.push([name, value]);
-  }
-
-  emit<Name extends DocumentName>(name: Name, value: CompetitionDocuments[Name]) {
-    this.listeners.get(name)?.change(value);
-  }
-
-  emitError(name: DocumentName, code: SyncErrorCode) {
-    this.listeners.get(name)?.error(code);
-  }
-
-  isListening(name: DocumentName) {
-    return this.listeners.has(name);
-  }
+export function fixtureBackup({
+  floor = { currentItemId: null, currentSetAt: null },
+  callbacks = {},
+  teamEntries = entries,
+}: {
+  floor?: FloorState;
+  callbacks?: TeamBackup['competitions'][0]['callbacks'];
+  teamEntries?: Entries;
+} = {}): TeamBackup {
+  if (couples.length !== fixturePartnerships.length) throw new Error('fixture changed');
+  return {
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
+    exportedAt: new Date(0).toISOString(),
+    team: { name: 'Purdue', activeCompetitionId: COMPETITION_ID },
+    dancers: fixtureDancers,
+    partnerships: fixturePartnerships,
+    competitions: [
+      {
+        info: { id: COMPETITION_ID, name: 'Classic', date: '2026-11-14', status: 'active' },
+        schedule: { items: schedule, events },
+        entries: teamEntries,
+        floor,
+        callbacks,
+      },
+    ],
+  };
 }
 
-export function fakeConnector(shared: Promise<FakeSync | null>, local = new FakeSync('local')) {
+type WriteMethod = Exclude<
+  keyof HeatSheetRepository,
+  'isShared' | 'watchTeam' | 'watchCompetition'
+>;
+const WRITE_METHODS: readonly WriteMethod[] = [
+  'updateTeam',
+  'saveDancers',
+  'savePartnerships',
+  'saveCompetition',
+  'saveSchedule',
+  'saveEntries',
+  'saveFloor',
+  'saveCallback',
+  'clearLive',
+];
+
+/**
+ * A shared repository for tests, backed by the real local repository in memory.
+ * `writes` logs every write this phone makes; `otherPhone` writes as another phone would
+ * (listeners see it, the log doesn't); `failWith` makes this phone's writes fail;
+ * `failReadsWith` reports a read error to the watchers.
+ */
+export function fakeRepository(seed: TeamBackup = fixtureBackup()) {
+  const otherPhone = localRepository(memoryStorage(), { seed });
+  const writes: [WriteMethod, ...unknown[]][] = [];
+  const readErrorListeners = new Set<(code: SyncErrorCode) => void>();
+  const control = { failWith: null as SyncFailure | null };
+
+  const repository = {
+    isShared: true,
+    watchTeam(onChange, onError) {
+      readErrorListeners.add(onError);
+      const stop = otherPhone.watchTeam(onChange, onError);
+      return () => {
+        readErrorListeners.delete(onError);
+        stop();
+      };
+    },
+    watchCompetition(competitionId, onChange, onError) {
+      readErrorListeners.add(onError);
+      const stop = otherPhone.watchCompetition(competitionId, onChange, onError);
+      return () => {
+        readErrorListeners.delete(onError);
+        stop();
+      };
+    },
+  } as HeatSheetRepository;
+  for (const method of WRITE_METHODS) {
+    (repository as unknown as Record<string, unknown>)[method] = async (...args: unknown[]) => {
+      if (control.failWith) throw control.failWith;
+      writes.push([method, ...args]);
+      await (otherPhone[method] as (...a: unknown[]) => Promise<void>)(...args);
+    };
+  }
+
   return {
-    local,
-    connector: {
-      connectShared: () => shared,
-      createLocal: () => local,
-    } satisfies SyncConnector,
+    repository,
+    otherPhone,
+    writes,
+    set failWith(failure: SyncFailure | null) {
+      control.failWith = failure;
+    },
+    failReadsWith: (code: SyncErrorCode) =>
+      readErrorListeners.forEach((listener) => listener(code)),
   };
 }
 

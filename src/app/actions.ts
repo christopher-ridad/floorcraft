@@ -1,24 +1,33 @@
 import type { ReadonlySignal, Signal } from '@preact/signals-core';
-import { recordCallback, type CallbackUpdate } from '../domain/callbacks';
+import { callbackKey, callbackMarkFor, type CallbackUpdate } from '../domain/callbacks';
 import { parseClockTime } from '../domain/clock';
 import type { Competition } from '../domain/competition';
-import { parseEntries } from '../domain/entries/parseEntries';
+import { parsePartnershipRows } from '../domain/entries/parsePartnershipRows';
 import { advanceFloor, markOnFloor, moveFloorBack } from '../domain/floor';
+import {
+  identifyEvents,
+  toScheduleLines,
+  type ScheduleLine,
+} from '../domain/schedule/identifyEvents';
 import { parseSchedule } from '../domain/schedule/parseSchedule';
-import type { Couple, IdFactory, ScheduleItem } from '../domain/types';
-import type { Clock, CompetitionDocuments, DocumentName } from './ports';
+import { createDancerDirectory, importPartnerships, type UnmatchedEntry } from '../domain/team';
+import type { CompetitionInfo, IdFactory, LiveState, Partnership } from '../domain/types';
+import type { Clock, CompetitionSnapshot, HeatSheetRepository, TeamSnapshot } from './ports';
 import type { Preferences } from './preferences';
 
 /** `[12] Silver Amer. Smooth Final` is a heat; any other text is a break label. */
 const HEAT_TEXT = /^\[(\d+)\]\s*(.+)$/;
 const NEW_HEAT_NAME = 'New heat';
-const UNKNOWN_PARTNER = 'TBA';
 
 export interface ActionContext {
-  documents: { [Name in DocumentName]: ReadonlySignal<CompetitionDocuments[Name]> };
-  preferences: Signal<Preferences>;
+  repository: HeatSheetRepository;
+  team: ReadonlySignal<TeamSnapshot>;
+  competitionData: ReadonlySignal<CompetitionSnapshot>;
+  activeCompetition: ReadonlySignal<CompetitionInfo | null>;
   competition: ReadonlySignal<Competition>;
-  commit<Name extends DocumentName>(name: Name, value: CompetitionDocuments[Name]): void;
+  preferences: Signal<Preferences>;
+  /** Reports the write's failure, if it fails. */
+  save(write: Promise<void>): void;
   clock: Clock;
   createId: IdFactory;
   savePreferences(preferences: Preferences): void;
@@ -28,24 +37,63 @@ export interface ActionContext {
 
 export type EditResult = 'saved' | 'invalid-time' | 'not-found';
 
+export interface EntriesImportResult {
+  couples: number;
+  /** Entries that match no event on the schedule; the captain adds those by hand. */
+  unmatched: UnmatchedEntry[];
+}
+
 export type Actions = ReturnType<typeof createActions>;
 
 export function createActions(ctx: ActionContext) {
-  const { documents, competition, commit, clock } = ctx;
-  const live = () => documents.live.peek();
-  const schedule = () => documents.schedule.peek();
-  const couples = () => documents.entries.peek();
+  const { repository, competition, clock, save } = ctx;
+  const competitionId = () => ctx.activeCompetition.peek()?.id ?? null;
+  const live = (): LiveState => competition.peek().live;
 
-  function updateCouple(coupleId: string, change: (couple: Couple) => Couple | null) {
-    let changed = false;
-    const next = couples().map((couple) => {
-      if (couple.id !== coupleId) return couple;
-      const updated = change(couple);
-      if (!updated) return couple;
-      changed = true;
-      return updated;
-    });
-    if (changed) commit('entries', next);
+  function saveFloor(next: LiveState) {
+    const id = competitionId();
+    if (!id || next === live()) return;
+    save(
+      repository.saveFloor(id, {
+        currentItemId: next.currentItemId,
+        currentSetAt: next.currentSetAt,
+      }),
+    );
+  }
+
+  /** Applies a change to the schedule's lines, then re-identifies its events and saves it. */
+  function saveScheduleLines(change: (lines: ScheduleLine[]) => ScheduleLine[]) {
+    const id = competitionId();
+    if (!id) return;
+    const current = ctx.competitionData.peek().schedule;
+    const schedule = identifyEvents(
+      change(toScheduleLines(current.items)),
+      current.events,
+      ctx.createId,
+    );
+    save(repository.saveSchedule(id, schedule));
+  }
+
+  function saveEntriesOf(coupleId: string, change: (eventIds: readonly string[]) => string[]) {
+    const id = competitionId();
+    if (!id) return;
+    const current = ctx.competitionData.peek().entries[coupleId] ?? [];
+    save(repository.saveEntries(id, { [coupleId]: change(current) }));
+  }
+
+  /** Points a partnership at dancers by name, adding dancers who are new. */
+  function savePartnershipNames(partnership: Partnership, lead: string, follow: string) {
+    const directory = createDancerDirectory(ctx.team.peek().dancers, ctx.createId);
+    const known = directory.dancers.length;
+    const updated = {
+      ...partnership,
+      leadId: directory.idFor(lead),
+      followId: directory.idFor(follow),
+      active: true,
+    };
+    const added = directory.dancers.slice(known);
+    if (added.length) save(repository.saveDancers(added));
+    save(repository.savePartnerships([updated]));
   }
 
   return {
@@ -53,43 +101,51 @@ export function createActions(ctx: ActionContext) {
 
     /** The next item is on the floor now. */
     advanceFloor() {
-      const next = advanceFloor(competition.peek(), clock.now());
-      if (next !== live()) commit('live', next);
+      saveFloor(advanceFloor(competition.peek(), clock.now()));
     },
 
     /** Corrects the floor back one item without changing the pace. */
     moveFloorBack() {
-      const next = moveFloorBack(competition.peek(), clock.now());
-      if (next !== live()) commit('live', next);
+      saveFloor(moveFloorBack(competition.peek(), clock.now()));
     },
 
     putOnFloor(itemId: string) {
-      commit('live', markOnFloor(live(), itemId, clock.now()));
+      saveFloor(markOnFloor(live(), itemId, clock.now()));
     },
 
     recordCallback(update: CallbackUpdate) {
-      const callbacks = recordCallback(live().callbacks, competition.peek().rounds, update);
-      commit('live', { ...live(), callbacks });
+      const id = competitionId();
+      if (!id) return;
+      const mark = callbackMarkFor(competition.peek().rounds, update);
+      save(repository.saveCallback(id, callbackKey(update.coupleId, update.eventId), mark));
     },
 
     /** Clears the floor position and every callback mark. */
     resetLiveTracking() {
-      commit('live', { currentItemId: null, currentSetAt: null, callbacks: {} });
+      const id = competitionId();
+      if (!id) return;
+      save(repository.clearLive(id));
       ctx.forgetGivenAlerts();
     },
 
     // ---- The schedule ----
 
     /**
-     * Replaces the schedule with pasted text. Clears the floor position; callback marks are kept.
+     * Replaces the schedule with pasted text. Events that match the old schedule keep their ids,
+     * so entries and callback marks stay attached. Clears the floor position.
      * Returns the number of heats found; nothing changes when there are none.
      */
     importSchedule(text: string): number {
-      const items = parseSchedule(text, ctx.createId);
-      const heatCount = items.filter((item) => item.kind === 'heat').length;
+      const id = competitionId();
+      if (!id) return 0;
+      const schedule = parseSchedule(text, {
+        previousEvents: ctx.competitionData.peek().schedule.events,
+        createId: ctx.createId,
+      });
+      const heatCount = schedule.items.filter((item) => item.kind === 'heat').length;
       if (!heatCount) return 0;
-      commit('live', { ...live(), currentItemId: null, currentSetAt: null });
-      commit('schedule', items);
+      save(repository.saveFloor(id, { currentItemId: null, currentSetAt: null }));
+      save(repository.saveSchedule(id, schedule));
       return heatCount;
     },
 
@@ -97,12 +153,13 @@ export function createActions(ctx: ActionContext) {
     editScheduleItem(itemId: string, timeText: string, itemText: string): EditResult {
       const time = timeText.trim();
       if (parseClockTime(time) === null) return 'invalid-time';
-      if (!schedule().some((item) => item.id === itemId)) return 'not-found';
-
+      if (!ctx.competitionData.peek().schedule.items.some((item) => item.id === itemId)) {
+        return 'not-found';
+      }
       const text = itemText.trim();
       const heat = HEAT_TEXT.exec(text);
       const scheduledTime = time.toUpperCase();
-      const edited: ScheduleItem = heat
+      const edited: ScheduleLine = heat
         ? {
             kind: 'heat',
             id: itemId,
@@ -111,10 +168,7 @@ export function createActions(ctx: ActionContext) {
             name: heat[2] ?? '',
           }
         : { kind: 'break', id: itemId, scheduledTime, label: text };
-      commit(
-        'schedule',
-        schedule().map((item) => (item.id === itemId ? edited : item)),
-      );
+      saveScheduleLines((lines) => lines.map((line) => (line.id === itemId ? edited : line)));
       return 'saved';
     },
 
@@ -123,112 +177,97 @@ export function createActions(ctx: ActionContext) {
      * (after a break: the schedule's first event). Returns the new heat's id.
      */
     insertHeatAfter(itemId: string): string | null {
-      const items = schedule();
-      const index = items.findIndex((item) => item.id === itemId);
-      const after = items[index];
-      if (!after) return null;
-
-      const eventNumber =
-        after.kind === 'heat'
-          ? after.eventNumber
-          : (competition.peek().events.keys().next().value ?? 1);
-      const heat: ScheduleItem = {
+      const items = ctx.competitionData.peek().schedule.items;
+      const after = items.find((item) => item.id === itemId);
+      if (!after || !competitionId()) return null;
+      const firstEvent = competition.peek().events.values().next().value;
+      const heat: ScheduleLine = {
         kind: 'heat',
         id: ctx.createId(),
         scheduledTime: after.scheduledTime,
-        eventNumber,
+        eventNumber: after.kind === 'heat' ? after.eventNumber : (firstEvent?.eventNumber ?? 1),
         name: NEW_HEAT_NAME,
       };
-      commit('schedule', [...items.slice(0, index + 1), heat, ...items.slice(index + 1)]);
+      saveScheduleLines((lines) => {
+        const index = lines.findIndex((line) => line.id === itemId);
+        return [...lines.slice(0, index + 1), heat, ...lines.slice(index + 1)];
+      });
       return heat.id;
     },
 
     deleteScheduleItem(itemId: string) {
-      commit(
-        'schedule',
-        schedule().filter((item) => item.id !== itemId),
-      );
+      saveScheduleLines((lines) => lines.filter((line) => line.id !== itemId));
     },
 
     // ---- Couples and entries ----
 
-    /** Replaces every couple with pasted partnership rows. Returns how many were found. */
-    importEntries(text: string): number {
-      const imported = parseEntries(text, ctx.createId);
-      if (imported.length) commit('entries', imported);
-      return imported.length;
+    /**
+     * Sets the team's partnerships and this competition's entries from pasted spreadsheet rows.
+     * Partnerships not in the rows become inactive. Nothing changes when no rows are found.
+     */
+    importEntries(text: string): EntriesImportResult {
+      const id = competitionId();
+      const rows = parsePartnershipRows(text);
+      if (!id || !rows.length) return { couples: 0, unmatched: [] };
+
+      const result = importPartnerships(
+        rows,
+        ctx.team.peek(),
+        competition.peek().events,
+        ctx.createId,
+      );
+      const entries = Object.fromEntries(
+        result.partnerships.map((partnership) => [
+          partnership.id,
+          result.entries[partnership.id] ?? [],
+        ]),
+      );
+      save(repository.saveDancers(result.dancers));
+      save(repository.savePartnerships(result.partnerships));
+      save(repository.saveEntries(id, entries));
+      return { couples: rows.length, unmatched: result.unmatched };
     },
 
-    /** Adds a couple with no events. Returns its id, or null without a lead's name. */
+    /** Adds a partnership with no events. Returns its id, or null without a lead's name. */
     addCouple(lead: string, follow: string): string | null {
-      const leadName = lead.trim();
-      if (!leadName) return null;
-      const couple: Couple = {
+      if (!lead.trim()) return null;
+      const partnership: Partnership = {
         id: ctx.createId(),
-        lead: leadName,
-        follow: follow.trim() || UNKNOWN_PARTNER,
-        entries: [],
-        manualMatches: [],
+        leadId: null,
+        followId: null,
+        active: true,
       };
-      commit('entries', [...couples(), couple]);
-      return couple.id;
+      savePartnershipNames(partnership, lead, follow);
+      return partnership.id;
     },
 
+    /** Points the couple at dancers by name. A blank name is a partner to be announced. */
     renameCouple(coupleId: string, lead: string, follow: string) {
-      updateCouple(coupleId, (couple) => ({
-        ...couple,
-        lead: lead.trim() || UNKNOWN_PARTNER,
-        follow: follow.trim() || UNKNOWN_PARTNER,
-      }));
+      const partnership = ctx.team
+        .peek()
+        .partnerships.find((candidate) => candidate.id === coupleId);
+      if (partnership) savePartnershipNames(partnership, lead, follow);
     },
 
+    /** Takes the couple off the team (kept for history) and out of this competition. */
     deleteCouple(coupleId: string) {
-      commit(
-        'entries',
-        couples().filter((couple) => couple.id !== coupleId),
+      const partnership = ctx.team
+        .peek()
+        .partnerships.find((candidate) => candidate.id === coupleId);
+      if (!partnership) return;
+      save(repository.savePartnerships([{ ...partnership, active: false }]));
+      saveEntriesOf(coupleId, () => []);
+    },
+
+    addEntry(coupleId: string, eventId: string) {
+      if (!competition.peek().events.has(eventId)) return;
+      saveEntriesOf(coupleId, (eventIds) =>
+        eventIds.includes(eventId) ? [...eventIds] : [...eventIds, eventId],
       );
     },
 
-    /** Enters the couple in a scheduled event, pinned to that event. */
-    addEntry(coupleId: string, eventNumber: number) {
-      const event = competition.peek().events.get(eventNumber);
-      if (!event) return;
-      updateCouple(coupleId, (couple) =>
-        couple.entries.includes(event.baseName)
-          ? null
-          : {
-              ...couple,
-              entries: [...couple.entries, event.baseName],
-              manualMatches: [...couple.manualMatches, { entry: event.baseName, eventNumber }],
-            },
-      );
-    },
-
-    removeEntry(coupleId: string, entryIndex: number) {
-      updateCouple(coupleId, (couple) => {
-        const entry = couple.entries[entryIndex];
-        if (entry === undefined) return null;
-        return {
-          ...couple,
-          entries: couple.entries.filter((_, index) => index !== entryIndex),
-          manualMatches: couple.manualMatches.filter((match) => match.entry !== entry),
-        };
-      });
-    },
-
-    /** Pins an entry to an event by hand, replacing the automatic match. */
-    chooseEventForEntry(coupleId: string, entryIndex: number, eventNumber: number) {
-      updateCouple(coupleId, (couple) => {
-        const entry = couple.entries[entryIndex];
-        if (entry === undefined) return null;
-        return {
-          ...couple,
-          manualMatches: [
-            ...couple.manualMatches.filter((match) => match.entry !== entry),
-            { entry, eventNumber },
-          ],
-        };
-      });
+    removeEntry(coupleId: string, eventId: string) {
+      saveEntriesOf(coupleId, (eventIds) => eventIds.filter((candidate) => candidate !== eventId));
     },
 
     // ---- This phone ----

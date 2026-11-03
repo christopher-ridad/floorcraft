@@ -1,7 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useState } from 'preact/hooks';
 import { ALERT_THRESHOLD_CHOICES, type Preferences } from '../../app/preferences';
-import { parseEntries } from '../../domain/entries/parseEntries';
+import { parsePartnershipRows } from '../../domain/entries/parsePartnershipRows';
 import { parseSchedule } from '../../domain/schedule/parseSchedule';
 import { DancerPicker } from '../components/DancerPicker';
 import { useApp } from '../context';
@@ -186,7 +186,7 @@ function ScheduleImport() {
       }
       button="Replace schedule"
       noun="heats"
-      count={(text) => parseSchedule(text).filter((item) => item.kind === 'heat').length}
+      count={(text) => parseSchedule(text).items.filter((item) => item.kind === 'heat').length}
       submit={(text) => {
         const heats = store.actions.importSchedule(text);
         return heats
@@ -207,12 +207,14 @@ function PartnershipsImport() {
       placeholder={'Chris\tBrooke\tBronze\tBronze I. Standard (WQ), Bronze A. Smooth (WT)'}
       button="Replace couples"
       noun="couples"
-      count={(text) => parseEntries(text).length}
+      count={(text) => parsePartnershipRows(text).length}
       submit={(text) => {
-        const couples = store.actions.importEntries(text);
-        return couples
-          ? `${couples} couples loaded.`
-          : 'No couples found. Each line needs a lead, a follow and at least one event.';
+        const { couples, unmatched } = store.actions.importEntries(text);
+        if (!couples)
+          return 'No couples found. Each line needs a lead, a follow and at least one event.';
+        if (!unmatched.length) return `${couples} couples loaded.`;
+        const missed = unmatched.map(({ lead, entry }) => `${lead}: ${entry}`).join('; ');
+        return `${couples} couples loaded. Not on the schedule, add by hand: ${missed}`;
       }}
     />
   );

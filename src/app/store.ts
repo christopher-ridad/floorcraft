@@ -1,7 +1,9 @@
-import { computed, effect, signal, type ReadonlySignal, type Signal } from '@preact/signals-core';
+import { computed, effect, signal, type ReadonlySignal } from '@preact/signals-core';
 import { deriveCompetition, type Competition } from '../domain/competition';
+import { resolveCouples } from '../domain/team';
 import {
   randomId,
+  type CompetitionInfo,
   type Couple,
   type IdFactory,
   type LiveState,
@@ -14,78 +16,99 @@ import {
   SyncFailure,
   type AlertOutput,
   type Clock,
-  type CompetitionDocuments,
-  type CompetitionSync,
-  type DocumentName,
+  type CompetitionSnapshot,
+  type HeatSheetRepository,
   type PreferencesStore,
   type ScreenWakeLock,
-  type SyncConnector,
+  type SyncErrorCode,
   type SyncMode,
+  type TeamSnapshot,
 } from './ports';
 import type { Preferences } from './preferences';
 
-/** How long to wait for the shared backend before working on this phone only. */
-const DEFAULT_CONNECT_TIMEOUT_MS = 11_000;
-const DOCUMENT_NAMES: readonly DocumentName[] = ['schedule', 'entries', 'live'];
-
-export const EMPTY_LIVE: LiveState = { currentItemId: null, currentSetAt: null, callbacks: {} };
+export const EMPTY_TEAM: TeamSnapshot = {
+  team: null,
+  dancers: [],
+  partnerships: [],
+  competitions: [],
+};
+export const EMPTY_COMPETITION: CompetitionSnapshot = {
+  schedule: { items: [], events: [] },
+  entries: {},
+  floor: { currentItemId: null, currentSetAt: null },
+  callbacks: {},
+};
 
 export interface AppDependencies {
-  sync: SyncConnector;
+  repository: HeatSheetRepository;
   preferences: PreferencesStore;
   clock: Clock;
   alertOutput: AlertOutput;
   wakeLock: ScreenWakeLock;
   createId?: IdFactory;
-  connectTimeoutMs?: number;
 }
 
-export type LoadedDocuments = Readonly<Record<DocumentName, boolean>>;
+export interface LoadedData {
+  team: boolean;
+  /** The active competition's data has arrived. */
+  competition: boolean;
+}
 
 export interface AppStore {
+  team: ReadonlySignal<TeamSnapshot>;
+  /** The competition everyone sees, or null before one is set up. */
+  activeCompetition: ReadonlySignal<CompetitionInfo | null>;
+  competitionData: ReadonlySignal<CompetitionSnapshot>;
   schedule: ReadonlySignal<ScheduleItem[]>;
   couples: ReadonlySignal<Couple[]>;
   live: ReadonlySignal<LiveState>;
-  /** Which documents have arrived from the backend at least once. */
-  loaded: ReadonlySignal<LoadedDocuments>;
+  loaded: ReadonlySignal<LoadedData>;
   syncMode: ReadonlySignal<SyncMode>;
+  /** Why the team's data can't be read or written, if it can't. */
+  syncError: ReadonlySignal<SyncErrorCode | null>;
   preferences: ReadonlySignal<Preferences>;
-  /** Everything derived from the documents. Recomputed only when they change. */
+  /** Everything derived for the active competition. Recomputed only when its inputs change. */
   competition: ReadonlySignal<Competition>;
   actions: Actions;
   onNotice(listener: NoticeListener): () => void;
-  /** Connects to the shared backend, falling back to this phone only. Starts alerts. */
-  start(): Promise<void>;
+  /** Starts watching the team's data, alerts and keep-awake. */
+  start(): void;
   dispose(): void;
 }
 
 export function createAppStore(deps: AppDependencies): AppStore {
-  const documents: { [Name in DocumentName]: Signal<CompetitionDocuments[Name]> } = {
-    schedule: signal<ScheduleItem[]>([]),
-    entries: signal<Couple[]>([]),
-    live: signal<LiveState>(EMPTY_LIVE),
-  };
-  const loaded = signal<LoadedDocuments>({ schedule: false, entries: false, live: false });
+  const { repository } = deps;
+  const team = signal<TeamSnapshot>(EMPTY_TEAM);
+  const competitionData = signal<CompetitionSnapshot>(EMPTY_COMPETITION);
+  const loaded = signal<LoadedData>({ team: false, competition: false });
   const syncMode = signal<SyncMode>('connecting');
+  const syncError = signal<SyncErrorCode | null>(null);
   const preferences = signal<Preferences>(deps.preferences.load());
-  const competition = computed(() =>
-    deriveCompetition({
-      schedule: documents.schedule.value,
-      couples: documents.entries.value,
-      live: documents.live.value,
-    }),
-  );
   const notices = new NoticeChannel();
 
-  let sync: CompetitionSync | null = null;
-  let unsubscribers: (() => void)[] = [];
-  let alertWatcher: AlertWatcher | null = null;
-  let stopWakeLock: (() => void) | null = null;
+  const activeCompetitionId = computed(() => team.value.team?.activeCompetitionId ?? null);
+  const activeCompetition = computed(
+    () => team.value.competitions.find((info) => info.id === activeCompetitionId.value) ?? null,
+  );
+  const couples = computed(() => resolveCouples(team.value.dancers, team.value.partnerships));
+  const live = computed<LiveState>(() => ({
+    ...competitionData.value.floor,
+    callbacks: competitionData.value.callbacks,
+  }));
+  const schedule = computed(() => competitionData.value.schedule.items);
+  const competition = computed(() =>
+    deriveCompetition({
+      schedule: schedule.value,
+      events: competitionData.value.schedule.events,
+      couples: couples.value,
+      entries: competitionData.value.entries,
+      live: live.value,
+    }),
+  );
 
-  /** Applies a change locally right away, then saves it if a backend is attached. */
-  function commit<Name extends DocumentName>(name: Name, value: CompetitionDocuments[Name]) {
-    documents[name].value = value;
-    sync?.save(name, value).catch((error: unknown) => {
+  /** Reports a failed save. The change itself shows (or not) through the watchers. */
+  function save(write: Promise<void>) {
+    write.catch((error: unknown) => {
       notices.publish({
         kind: 'save-failed',
         code: error instanceof SyncFailure ? error.code : 'network',
@@ -94,26 +117,37 @@ export function createAppStore(deps: AppDependencies): AppStore {
     });
   }
 
-  function attach(next: CompetitionSync) {
-    for (const unsubscribe of unsubscribers) unsubscribe();
-    sync = next;
-    syncMode.value = next.mode;
-    unsubscribers = DOCUMENT_NAMES.map((name) =>
-      next.subscribe(
-        name,
-        (value) => {
-          documents[name].value = value;
-          if (!loaded.peek()[name]) loaded.value = { ...loaded.peek(), [name]: true };
-        },
-        (code) => {
-          if (code === 'unavailable') fallBackToLocal();
-        },
-      ),
+  let alertWatcher: AlertWatcher | null = null;
+  const stops: (() => void)[] = [];
+
+  function watchTeam() {
+    return repository.watchTeam(
+      (snapshot) => {
+        team.value = snapshot;
+        syncMode.value = repository.isShared ? 'shared' : 'local';
+        syncError.value = null;
+        if (!loaded.peek().team) loaded.value = { ...loaded.peek(), team: true };
+      },
+      (code) => (syncError.value = code),
     );
   }
 
-  function fallBackToLocal() {
-    if (syncMode.peek() !== 'local') attach(deps.sync.createLocal());
+  /** Follows whichever competition is active. */
+  function watchActiveCompetition() {
+    return effect(() => {
+      const competitionId = activeCompetitionId.value;
+      competitionData.value = EMPTY_COMPETITION;
+      loaded.value = { ...loaded.peek(), competition: false };
+      if (!competitionId) return;
+      return repository.watchCompetition(
+        competitionId,
+        (snapshot) => {
+          competitionData.value = snapshot;
+          if (!loaded.peek().competition) loaded.value = { ...loaded.peek(), competition: true };
+        },
+        (code) => (syncError.value = code),
+      );
+    });
   }
 
   function watchWakeLock() {
@@ -131,10 +165,13 @@ export function createAppStore(deps: AppDependencies): AppStore {
   }
 
   const actions = createActions({
-    documents,
-    preferences,
+    repository,
+    team,
+    competitionData,
+    activeCompetition,
     competition,
-    commit,
+    preferences,
+    save,
     clock: deps.clock,
     createId: deps.createId ?? randomId,
     savePreferences: (value) => deps.preferences.save(value),
@@ -143,36 +180,32 @@ export function createAppStore(deps: AppDependencies): AppStore {
   });
 
   return {
-    schedule: documents.schedule,
-    couples: documents.entries,
-    live: documents.live,
+    team,
+    activeCompetition,
+    competitionData,
+    schedule,
+    couples,
+    live,
     loaded,
     syncMode,
+    syncError,
     preferences,
     competition,
     actions,
     onNotice: (listener) => notices.subscribe(listener),
 
-    async start() {
+    start() {
       alertWatcher = watchAlerts({ competition, preferences, output: deps.alertOutput, notices });
-      stopWakeLock = watchWakeLock();
-
-      const timeout = setTimeout(
-        fallBackToLocal,
-        deps.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
+      stops.push(
+        () => alertWatcher?.dispose(),
+        watchWakeLock(),
+        watchTeam(),
+        watchActiveCompetition(),
       );
-      const shared = await deps.sync.connectShared().catch(() => null);
-      clearTimeout(timeout);
-      // A shared connection that arrives late still replaces this-phone-only mode.
-      if (shared) attach(shared);
-      else fallBackToLocal();
     },
 
     dispose() {
-      for (const unsubscribe of unsubscribers) unsubscribe();
-      unsubscribers = [];
-      alertWatcher?.dispose();
-      stopWakeLock?.();
+      while (stops.length) stops.pop()?.();
     },
   };
 }

@@ -2,25 +2,48 @@
  * Interfaces the app layer needs from the outside world. src/infra implements them; tests use
  * in-memory fakes.
  */
-import type { Couple, LiveState, ScheduleItem } from '../domain/types';
+import type {
+  CallbackMark,
+  CallbackMarks,
+  CompetitionInfo,
+  Dancer,
+  Entries,
+  FloorState,
+  Partnership,
+  Schedule,
+} from '../domain/types';
 import type { Preferences } from './preferences';
 
-/** The three shared documents every phone reads and writes. */
-export interface CompetitionDocuments {
-  schedule: ScheduleItem[];
-  entries: Couple[];
-  live: LiveState;
+export interface TeamInfo {
+  name: string;
+  /** Firebase user ids of the team's captains. */
+  captainUids: string[];
+  /** The competition everyone sees, or null before one is set up. */
+  activeCompetitionId: string | null;
 }
-export type DocumentName = keyof CompetitionDocuments;
 
-/** `connecting` until a backend is chosen; `local` keeps data on this phone only. */
-export type SyncMode = 'connecting' | 'shared' | 'local';
+/** Everything about the team, as one consistent snapshot. */
+export interface TeamSnapshot {
+  /** Null when the team hasn't been created yet. */
+  team: TeamInfo | null;
+  dancers: Dancer[];
+  partnerships: Partnership[];
+  competitions: CompetitionInfo[];
+}
+
+/** Everything about one competition, as one consistent snapshot. */
+export interface CompetitionSnapshot {
+  schedule: Schedule;
+  entries: Entries;
+  floor: FloorState;
+  callbacks: CallbackMarks;
+}
 
 export type SyncErrorCode =
-  /** The viewer can read but not write the shared sheet. */
+  /** This phone isn't allowed to do that (not a captain, or removed from the team). */
   | 'read-only'
   | 'quota-exceeded'
-  /** The shared database can't be used here; fall back to this phone only. */
+  /** The data can't be read here: not signed in, or not a member of the team. */
   | 'unavailable'
   /** Anything else, usually connectivity. */
   | 'network';
@@ -35,24 +58,46 @@ export class SyncFailure extends Error {
   }
 }
 
-export interface CompetitionSync {
-  readonly mode: 'shared' | 'local';
-  /** Calls `onChange` with the current value, then again on every change. Returns unsubscribe. */
-  subscribe<Name extends DocumentName>(
-    name: Name,
-    onChange: (value: CompetitionDocuments[Name]) => void,
+/**
+ * Where the team's data lives. Watchers call back with the current snapshot right away (or as
+ * soon as it loads), then after every change, including this phone's own writes.
+ * Writes reject with SyncFailure.
+ */
+export interface HeatSheetRepository {
+  /** True when changes are shared with the whole team; false for this-phone-only storage. */
+  readonly isShared: boolean;
+
+  watchTeam(
+    onChange: (snapshot: TeamSnapshot) => void,
     onError: (code: SyncErrorCode) => void,
   ): () => void;
-  /** Saves a document. Saves to the same document happen in order. Rejects with SyncFailure. */
-  save<Name extends DocumentName>(name: Name, value: CompetitionDocuments[Name]): Promise<void>;
+  watchCompetition(
+    competitionId: string,
+    onChange: (snapshot: CompetitionSnapshot) => void,
+    onError: (code: SyncErrorCode) => void,
+  ): () => void;
+
+  // Setup: captains only.
+  updateTeam(change: Partial<TeamInfo>): Promise<void>;
+  /** Adds or replaces these dancers; others are left alone. */
+  saveDancers(dancers: readonly Dancer[]): Promise<void>;
+  /** Adds or replaces these partnerships; others are left alone. */
+  savePartnerships(partnerships: readonly Partnership[]): Promise<void>;
+  saveCompetition(info: CompetitionInfo): Promise<void>;
+  saveSchedule(competitionId: string, schedule: Schedule): Promise<void>;
+  /** Replaces the entries of the partnerships given; others are left alone. */
+  saveEntries(competitionId: string, entries: Entries): Promise<void>;
+
+  // Live tracking: anyone on the team.
+  saveFloor(competitionId: string, floor: FloorState): Promise<void>;
+  /** Stores one callback mark under its key, or removes it (null). */
+  saveCallback(competitionId: string, key: string, mark: CallbackMark | null): Promise<void>;
+  /** Clears the floor position and every callback mark. */
+  clearLive(competitionId: string): Promise<void>;
 }
 
-export interface SyncConnector {
-  /** The team's shared backend, or null when it isn't available here. */
-  connectShared(): Promise<CompetitionSync | null>;
-  /** This-phone-only storage. */
-  createLocal(): CompetitionSync;
-}
+/** `connecting` until the team's data first loads. */
+export type SyncMode = 'connecting' | 'shared' | 'local';
 
 export interface PreferencesStore {
   load(): Preferences;

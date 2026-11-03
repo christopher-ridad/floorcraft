@@ -1,31 +1,26 @@
 import { callbackKey, callbackStatus } from './callbacks';
 import { minutesSinceMidnight, parseClockTime } from './clock';
 import { dancerName } from './dancers';
-import { matchEntry } from './entries/matchEntry';
 import { roundsByEvent, type RoundsByEvent } from './rounds';
 import { buildEventCatalog, type EventCatalog } from './schedule/eventCatalog';
 import { parseHeatName, type HeatName } from './schedule/heatName';
-import type { Couple, LiveState, Round, ScheduleItem } from './types';
+import type { Couple, Entries, EventDetails, LiveState, Round, ScheduleItem } from './types';
 
 /** A delay this large means the floor was set on another day, so it is ignored. */
 const MAX_PLAUSIBLE_DELAY_MINUTES = 600;
 
 export interface CompetitionState {
   schedule: readonly ScheduleItem[];
+  events: readonly EventDetails[];
   couples: readonly Couple[];
+  entries: Entries;
   live: LiveState;
 }
 
-export interface EntryMatch {
-  entry: string;
-  /** The matched event, or null when the entry matches nothing on the schedule. */
-  eventNumber: number | null;
-  isManual: boolean;
-}
-
-export interface UnmatchedEntry {
+/** An entry for an event that is no longer on the schedule. */
+export interface MissingEntry {
   couple: Couple;
-  entry: string;
+  eventId: string;
 }
 
 export interface ItemInfo {
@@ -49,12 +44,13 @@ export interface DancerSummary {
 }
 
 /** Everything the app shows, derived from the stored state. */
-export interface Competition extends CompetitionState {
+export interface Competition extends Omit<CompetitionState, 'events'> {
+  /** The schedule's events, keyed by `eventId`. */
   events: EventCatalog;
   rounds: RoundsByEvent;
-  /** Each couple's entries with the event they matched, keyed by couple id. */
-  entryMatches: ReadonlyMap<string, readonly EntryMatch[]>;
-  unmatchedEntries: readonly UnmatchedEntry[];
+  /** Each couple's events that are on the schedule, keyed by couple id. */
+  coupleEvents: ReadonlyMap<string, readonly string[]>;
+  missingEntries: readonly MissingEntry[];
   /** Position and parsed details of each schedule item, keyed by item id. */
   items: ReadonlyMap<string, ItemInfo>;
   /** Team couples in each heat, keyed by heat id. */
@@ -69,23 +65,20 @@ export interface Competition extends CompetitionState {
 
 export function deriveCompetition(state: CompetitionState): Competition {
   const { schedule, couples, live } = state;
-  const events = buildEventCatalog(schedule);
+  const events = buildEventCatalog(state.events);
   const rounds = roundsByEvent(schedule);
-  const { entryMatches, unmatchedEntries } = matchAllEntries(couples, events);
+  const { coupleEvents, missingEntries } = checkEntries(couples, state.entries, events);
   const items = describeItems(schedule);
 
   const heatTeams = new Map<string, HeatTeam>();
   for (const item of schedule) {
     if (item.kind !== 'heat') continue;
     const round = items.get(item.id)?.heatName?.round ?? 5;
-    const first = rounds.get(item.eventNumber)?.[0] ?? round;
+    const first = rounds.get(item.eventId)?.[0] ?? round;
     const team: HeatTeam = { dancing: [], possible: [], eliminated: [], firstRound: first };
     for (const couple of couples) {
-      const isEntered = entryMatches
-        .get(couple.id)
-        ?.some((match) => match.eventNumber === item.eventNumber);
-      if (!isEntered) continue;
-      const mark = live.callbacks[callbackKey(couple.id, item.eventNumber)];
+      if (!coupleEvents.get(couple.id)?.includes(item.eventId)) continue;
+      const mark = live.callbacks[callbackKey(couple.id, item.eventId)];
       const status = callbackStatus(mark, round, first);
       team[status].push(couple);
     }
@@ -104,8 +97,8 @@ export function deriveCompetition(state: CompetitionState): Competition {
     ...state,
     events,
     rounds,
-    entryMatches,
-    unmatchedEntries,
+    coupleEvents,
+    missingEntries,
     items,
     heatTeams,
     currentIndex,
@@ -114,20 +107,20 @@ export function deriveCompetition(state: CompetitionState): Competition {
   };
 }
 
-function matchAllEntries(couples: readonly Couple[], events: EventCatalog) {
-  const entryMatches = new Map<string, EntryMatch[]>();
-  const unmatchedEntries: UnmatchedEntry[] = [];
+function checkEntries(couples: readonly Couple[], entries: Entries, events: EventCatalog) {
+  const coupleEvents = new Map<string, string[]>();
+  const missingEntries: MissingEntry[] = [];
   for (const couple of couples) {
-    const matches = couple.entries.map((entry): EntryMatch => {
-      const manual = couple.manualMatches.find((match) => match.entry === entry);
-      const eventNumber = manual ? manual.eventNumber : matchEntry(entry, events);
-      const isScheduled = eventNumber !== null && events.has(eventNumber);
-      if (!isScheduled) unmatchedEntries.push({ couple, entry });
-      return { entry, eventNumber: isScheduled ? eventNumber : null, isManual: !!manual };
-    });
-    entryMatches.set(couple.id, matches);
+    const eventIds = entries[couple.id] ?? [];
+    coupleEvents.set(
+      couple.id,
+      eventIds.filter((eventId) => events.has(eventId)),
+    );
+    for (const eventId of eventIds) {
+      if (!events.has(eventId)) missingEntries.push({ couple, eventId });
+    }
   }
-  return { entryMatches, unmatchedEntries };
+  return { coupleEvents, missingEntries };
 }
 
 function describeItems(schedule: readonly ScheduleItem[]): Map<string, ItemInfo> {

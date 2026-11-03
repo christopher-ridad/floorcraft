@@ -245,14 +245,14 @@ function CallbacksToEnter() {
           const record = (reachedRound: typeof callback.reachedRound, eliminated: boolean) => {
             store.actions.recordCallback({
               coupleId: callback.couple.id,
-              eventNumber: callback.eventNumber,
+              eventId: callback.eventId,
               reachedRound,
               eliminated,
             });
             view.showToast(eliminated ? 'Marked not called back.' : 'Callback saved.');
           };
           return (
-            <div class={styles.callback} key={`${callback.couple.id}_${callback.eventNumber}`}>
+            <div class={styles.callback} key={`${callback.couple.id}_${callback.eventId}`}>
               <div class={styles.question}>
                 <b>{coupleName(callback.couple)}</b> · {heatTitle(competition, callback.dancedHeat)}
                 <br />

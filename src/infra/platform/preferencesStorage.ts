@@ -32,6 +32,7 @@ function withDefaults(stored: StoredPreferences): Preferences {
     vibrate: pick('vibrate'),
     keepScreenAwake: pick('keepScreenAwake'),
     showPossibleHeats: pick('showPossibleHeats'),
+    skipDancerClaim: pick('skipDancerClaim'),
   };
 }
 

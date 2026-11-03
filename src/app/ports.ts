@@ -99,6 +99,47 @@ export interface HeatSheetRepository {
 /** `connecting` until the team's data first loads. */
 export type SyncMode = 'connecting' | 'shared' | 'local';
 
+export type SignInProvider = 'anonymous' | 'google';
+
+/** A phone (or Google account) that has joined the team. */
+export interface Membership {
+  uid: string;
+  /** The dancer this phone belongs to, or null until they pick their name (or if they don't dance). */
+  dancerId: string | null;
+  provider: SignInProvider;
+  /** Epoch ms. */
+  joinedAt: number;
+}
+
+/** What the signed-in user may see. */
+export type TeamAccess =
+  { kind: 'none' } | { kind: 'team'; isCaptain: boolean; membership: Membership | null };
+
+/**
+ * Joining the team and who is on it. Writes reject with SyncFailure.
+ * A watcher that loses access (for example, the phone was removed) reports `none` and stops.
+ */
+export interface AccessRepository {
+  watchAccess(uid: string, onChange: (access: TeamAccess) => void): () => void;
+  /** Which phone has claimed each dancer: dancer id → user id. */
+  watchClaims(onChange: (claims: Record<string, string>) => void): () => void;
+  /** The current join code. Captains only. */
+  watchJoinCode(onChange: (code: string | null) => void): () => void;
+
+  /** Creates the team with this user as its only captain and member. */
+  createTeam(uid: string, name: string, joinCode: string): Promise<void>;
+  /** Joins with the team's join code. */
+  join(uid: string, joinCode: string, provider: SignInProvider): Promise<void>;
+  /** Adds a captain's own membership; captains need no code. */
+  joinAsCaptain(uid: string): Promise<void>;
+  /** Links this phone to a dancer, releasing the previous claim. Fails if someone else has them. */
+  claimDancer(uid: string, dancerId: string, previousDancerId: string | null): Promise<void>;
+  /** Records that this member now signs in with Google. */
+  setProvider(uid: string, provider: SignInProvider): Promise<void>;
+  /** Replaces the join code. Members who already joined stay; the old link stops working. */
+  setJoinCode(joinCode: string): Promise<void>;
+}
+
 export interface PreferencesStore {
   load(): Preferences;
   save(preferences: Preferences): void;

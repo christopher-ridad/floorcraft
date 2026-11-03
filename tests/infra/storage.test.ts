@@ -195,6 +195,7 @@ describe('preferences storage', () => {
       vibrate: true,
       keepScreenAwake: true,
       showPossibleHeats: false,
+      skipDancerClaim: false,
     });
   });
 

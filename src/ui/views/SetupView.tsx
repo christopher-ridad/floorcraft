@@ -6,14 +6,29 @@ import { parseSchedule } from '../../domain/schedule/parseSchedule';
 import { DancerPicker } from '../components/DancerPicker';
 import { useApp } from '../context';
 import { cx, plural } from '../format';
+import { AccountCard, TeamAccessCard } from './AccountCards';
 import { CouplesEditor } from './CouplesEditor';
 import styles from './SetupView.module.css';
 
 export function SetupView() {
+  const { session } = useApp();
   return (
     <>
       <h2>This phone</h2>
       <PhoneSettings />
+      <h2>Account</h2>
+      <AccountCard />
+      {session.isCaptain.value && <CaptainSetup />}
+    </>
+  );
+}
+
+/** Setting up the team and the competition. Only captains see this (and the rules enforce it). */
+function CaptainSetup() {
+  return (
+    <>
+      <h2>Team link</h2>
+      <TeamAccessCard />
       <h2>Sync</h2>
       <SyncStatus />
       <h2>Couples & entries</h2>
@@ -104,8 +119,7 @@ function SyncStatus() {
       )}
       {mode === 'local' && (
         <div class="banner">
-          This phone is not connected to the shared sheet, so changes stay on this phone only. Sign
-          in to Claude from the shared link to sync.
+          This copy isn't connected to the team's database, so changes stay on this phone only.
         </div>
       )}
       {mode === 'connecting' && 'Connecting…'}

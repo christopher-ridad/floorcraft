@@ -193,7 +193,7 @@ The layers stay the same; the content changes.
 - **Infra:** `infra/firebase/` with the app config, auth and Firestore repositories. The Claude-database and localStorage sync backends are removed.
 - **UI:** join flow, captain sign-in, team editor, competition list, schedule review, entries editor. Setup only shows for captains.
 - **Development and tests:** the Firebase Local Emulator Suite for development, rules tests and the Playwright smoke test (in CI too), so tests never touch real data.
-- **Bundle:** the Firebase SDK grows the page from about 30 KB to roughly 100–150 KB gzipped.
+- **Bundle:** the Firebase SDK grows the page from about 30 KB to about 230 KB gzipped (measured), downloaded once and then cached.
 
 ## Moving the existing data
 

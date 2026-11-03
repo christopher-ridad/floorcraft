@@ -8,6 +8,8 @@ export interface Preferences {
   keepScreenAwake: boolean;
   /** Show heats a couple only dances if called back. */
   showPossibleHeats: boolean;
+  /** This phone chose not to link to a dancer (e.g. a captain who isn't dancing). */
+  skipDancerClaim: boolean;
 }
 
 export const DEFAULT_PREFERENCES: Readonly<Preferences> = {
@@ -17,6 +19,7 @@ export const DEFAULT_PREFERENCES: Readonly<Preferences> = {
   vibrate: true,
   keepScreenAwake: false,
   showPossibleHeats: true,
+  skipDancerClaim: false,
 };
 
 export const ALERT_THRESHOLD_CHOICES = [1, 2, 3, 4, 5, 6, 8] as const;

@@ -1,11 +1,18 @@
 import { BACKUP_FORMAT, BACKUP_VERSION, type TeamBackup } from '../../src/app/backup';
-import type {
-  AlertOutput,
-  HeatSheetRepository,
-  PreferencesStore,
-  ScreenWakeLock,
-  SyncErrorCode,
-  SyncFailure,
+import {
+  SyncFailure as SyncFailureClass,
+  type AccessRepository,
+  type AlertOutput,
+  type AuthFailure,
+  type AuthService,
+  type AuthUser,
+  type HeatSheetRepository,
+  type Membership,
+  type PreferencesStore,
+  type ScreenWakeLock,
+  type SyncErrorCode,
+  type SyncFailure,
+  type TeamAccess,
 } from '../../src/app/ports';
 import { DEFAULT_PREFERENCES, type Preferences } from '../../src/app/preferences';
 import type { Dancer, Entries, FloorState, Partnership } from '../../src/domain/types';
@@ -168,3 +175,162 @@ export function fakeWakeLock(grants: boolean) {
 }
 
 export const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** Sign-in for tests. Google sign-in uses `googleUser`; anonymous sign-ins get fresh ids. */
+export function fakeAuth({ signedIn = null as AuthUser | null } = {}) {
+  let user = signedIn;
+  let anonymousCount = 0;
+  const listeners = new Set<(user: AuthUser | null) => void>();
+  const control = {
+    googleUser: {
+      uid: 'google-user',
+      isAnonymous: false,
+      displayName: 'Casey',
+      email: 'casey@example.com',
+    } as AuthUser,
+    failSignIn: null as AuthFailure | null,
+  };
+  const setUser = (next: AuthUser | null) => {
+    user = next;
+    listeners.forEach((listener) => listener(user));
+  };
+  const auth: AuthService = {
+    onUserChange(listener) {
+      listeners.add(listener);
+      listener(user);
+      return () => listeners.delete(listener);
+    },
+    async signInWithGoogle() {
+      if (control.failSignIn) throw control.failSignIn;
+      setUser(control.googleUser);
+    },
+    async signInAnonymously() {
+      const next = {
+        uid: `phone-${++anonymousCount}`,
+        isAnonymous: true,
+        displayName: null,
+        email: null,
+      };
+      setUser(next);
+      return next;
+    },
+    async linkWithGoogle() {
+      if (control.failSignIn) throw control.failSignIn;
+      if (user) setUser({ ...user, isAnonymous: false, email: 'linked@example.com' });
+    },
+    async signOut() {
+      setUser(null);
+    },
+  };
+  return {
+    auth,
+    control,
+    get user() {
+      return user;
+    },
+  };
+}
+
+/**
+ * Team access for tests, enforcing what the security rules enforce: the join code, one phone per
+ * dancer, and that only members and captains see the team.
+ */
+export function fakeAccess({
+  captainUids = [] as string[],
+  joinCode = 'team-code',
+  teamExists = true,
+} = {}) {
+  const state = {
+    teamExists,
+    captainUids: [...captainUids],
+    joinCode,
+    members: new Map<string, Membership>(),
+    claims: new Map<string, string>(),
+  };
+  const accessWatchers = new Map<(access: TeamAccess) => void, string>();
+  const claimWatchers = new Set<(claims: Record<string, string>) => void>();
+  const codeWatchers = new Set<(code: string | null) => void>();
+
+  const accessOf = (uid: string): TeamAccess => {
+    const isCaptain = state.teamExists && state.captainUids.includes(uid);
+    const membership = state.members.get(uid) ?? null;
+    return isCaptain || membership ? { kind: 'team', isCaptain, membership } : { kind: 'none' };
+  };
+  const notify = () => {
+    for (const [watcher, uid] of [...accessWatchers]) {
+      const access = accessOf(uid);
+      // Like Firestore, losing access ends the watch.
+      if (access.kind === 'none') accessWatchers.delete(watcher);
+      watcher(access);
+    }
+    claimWatchers.forEach((watcher) => watcher(Object.fromEntries(state.claims)));
+    codeWatchers.forEach((watcher) => watcher(state.joinCode));
+  };
+  const refuse = () => Promise.reject(new SyncFailureClass('read-only'));
+
+  const access: AccessRepository = {
+    watchAccess(uid, onChange) {
+      accessWatchers.set(onChange, uid);
+      const current = accessOf(uid);
+      if (current.kind === 'none') accessWatchers.delete(onChange);
+      onChange(current);
+      return () => accessWatchers.delete(onChange);
+    },
+    watchClaims(onChange) {
+      claimWatchers.add(onChange);
+      onChange(Object.fromEntries(state.claims));
+      return () => claimWatchers.delete(onChange);
+    },
+    watchJoinCode(onChange) {
+      codeWatchers.add(onChange);
+      onChange(state.joinCode);
+      return () => codeWatchers.delete(onChange);
+    },
+    async createTeam(uid, _name, code) {
+      if (state.teamExists) return refuse();
+      Object.assign(state, { teamExists: true, captainUids: [uid], joinCode: code });
+      state.members.set(uid, { uid, dancerId: null, provider: 'google', joinedAt: 1 });
+      notify();
+    },
+    async join(uid, code, provider) {
+      if (!state.teamExists || code !== state.joinCode) return refuse();
+      state.members.set(uid, { uid, dancerId: null, provider, joinedAt: 1 });
+      notify();
+    },
+    async joinAsCaptain(uid) {
+      if (!state.captainUids.includes(uid)) return refuse();
+      state.members.set(uid, { uid, dancerId: null, provider: 'google', joinedAt: 1 });
+      notify();
+    },
+    async claimDancer(uid, dancerId, previousDancerId) {
+      const member = state.members.get(uid);
+      const holder = state.claims.get(dancerId);
+      if (!member || (holder && holder !== uid)) return refuse();
+      if (previousDancerId) state.claims.delete(previousDancerId);
+      state.claims.set(dancerId, uid);
+      state.members.set(uid, { ...member, dancerId });
+      notify();
+    },
+    async setProvider(uid, provider) {
+      const member = state.members.get(uid);
+      if (!member) return refuse();
+      state.members.set(uid, { ...member, provider });
+      notify();
+    },
+    async setJoinCode(code) {
+      state.joinCode = code;
+      notify();
+    },
+  };
+
+  return {
+    access,
+    state,
+    removeMember(uid: string) {
+      state.members.delete(uid);
+      for (const [dancerId, holder] of state.claims)
+        if (holder === uid) state.claims.delete(dancerId);
+      notify();
+    },
+  };
+}

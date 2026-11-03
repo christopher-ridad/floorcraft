@@ -1,0 +1,70 @@
+.screen {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: max(32px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+    max(32px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.panel {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.brand {
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 0;
+}
+.title {
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1.15;
+  margin: 0;
+  text-wrap: balance;
+}
+.lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15.5px;
+}
+.dancers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+.dancer {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: left;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dancer:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.dancer span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.setUp summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.setUp[open] summary {
+  margin-bottom: 12px;
+}

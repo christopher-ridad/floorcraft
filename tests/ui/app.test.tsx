@@ -2,7 +2,9 @@
 import { cleanup, render, screen, within } from '@testing-library/preact';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import type { AuthUser } from '../../src/app/ports';
 import type { Preferences } from '../../src/app/preferences';
+import { createSession } from '../../src/app/session';
 import { createAppStore } from '../../src/app/store';
 import type { FloorState } from '../../src/domain/types';
 import { memoryStorage } from '../../src/infra/storage/keyValueStorage';
@@ -11,11 +13,14 @@ import { createViewState, type Tab } from '../../src/ui/viewState';
 import { at } from '../domain/fixture';
 import {
   COMPETITION_ID,
+  fakeAccess,
   fakeAlertOutput,
+  fakeAuth,
   fakePreferences,
   fakeRepository,
   fakeWakeLock,
   fixtureBackup,
+  settle,
 } from '../app/fakes';
 
 beforeAll(() => {
@@ -24,17 +29,35 @@ beforeAll(() => {
 });
 afterEach(cleanup);
 
+const captain: AuthUser = {
+  uid: 'captain',
+  isAnonymous: false,
+  displayName: 'Casey',
+  email: 'casey@example.com',
+};
+
 interface Options {
   tab?: Tab;
   preferences?: Partial<Preferences>;
   floor?: FloorState;
+  /** Who is signed in; by default the team's captain, who isn't dancing. */
+  signedIn?: AuthUser | null;
+  joinCode?: string | null;
+  access?: ReturnType<typeof fakeAccess>;
 }
 
-async function renderApp({ tab = 'now', preferences, floor }: Options = {}) {
+async function renderApp({
+  tab = 'now',
+  preferences,
+  floor,
+  signedIn = captain,
+  joinCode = null,
+  access = fakeAccess({ captainUids: ['captain'] }),
+}: Options = {}) {
   const backend = fakeRepository(fixtureBackup({ floor }));
   const store = createAppStore({
     repository: backend.repository,
-    preferences: fakePreferences(preferences).store,
+    preferences: fakePreferences({ skipDancerClaim: signedIn === captain, ...preferences }).store,
     clock: { now: () => at(9, 20) },
     alertOutput: fakeAlertOutput().output,
     wakeLock: fakeWakeLock(true).wakeLock,
@@ -43,10 +66,20 @@ async function renderApp({ tab = 'now', preferences, floor }: Options = {}) {
       return () => `new${++next}`;
     })(),
   });
+  const auth = fakeAuth({ signedIn });
+  const session = createSession({
+    auth: auth.auth,
+    access: access.access,
+    store,
+    joinCode,
+    onJoinCodeUsed: () => {},
+    createJoinCode: () => 'fresh-code',
+  });
   const view = createViewState(memoryStorage({ 'floorcraft:tab': tab }));
-  render(<App store={store} view={view} />);
-  store.start();
-  return { store, backend, user: userEvent.setup() };
+  render(<App store={store} session={session} view={view} />);
+  session.start();
+  await settle();
+  return { store, session, backend, access, auth, user: userEvent.setup() };
 }
 
 const onTheFloor = (itemId: string, setAt = at(9, 0)): FloorState => ({
@@ -229,5 +262,101 @@ describe('Setup tab', () => {
   it('shows that the sheet is shared', async () => {
     await renderApp({ tab: 'setup' });
     expect(await screen.findByText('Shared with the team.')).toBeTruthy();
+  });
+});
+
+describe('getting in', () => {
+  it('asks a visitor without a link to get one, and lets the captain sign in', async () => {
+    const { user } = await renderApp({
+      signedIn: null,
+      access: fakeAccess({ captainUids: ['google-user'] }),
+      preferences: { skipDancerClaim: true },
+    });
+    expect(screen.getByText(/open the link your captain sent you/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Captain? Sign in with Google' }));
+    expect(await screen.findByText('Competition not started')).toBeTruthy();
+  });
+
+  it('joins with the team link and asks who you are', async () => {
+    const { user, session } = await renderApp({ signedIn: null, joinCode: 'team-code' });
+    expect(screen.getByRole('heading', { name: 'Who are you?' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Chris' }));
+    expect(await screen.findByText('Chris, your next heat')).toBeTruthy();
+    expect(session.membership.value?.dancerId).toBe('chris');
+  });
+
+  it('shows names other phones have taken', async () => {
+    const access = fakeAccess();
+    await access.access.join('other', 'team-code', 'anonymous');
+    await access.access.claimDancer('other', 'chris', null);
+    await renderApp({ signedIn: null, joinCode: 'team-code', access });
+
+    const chris = screen.getByRole('button', { name: /^Chris/ }) as HTMLButtonElement;
+    expect(chris.disabled).toBe(true);
+    expect(within(chris).getByText('Taken')).toBeTruthy();
+  });
+
+  it('explains a join link that no longer works', async () => {
+    await renderApp({ signedIn: null, joinCode: 'old-code' });
+    expect(screen.getByRole('heading', { name: "That join link didn't work" })).toBeTruthy();
+  });
+
+  it('lets a Google account create the team the first time', async () => {
+    const access = fakeAccess({ teamExists: false });
+    const { user } = await renderApp({
+      signedIn: { ...captain, uid: 'founder' },
+      access,
+    });
+    expect(screen.getByRole('heading', { name: "You're not on the team yet" })).toBeTruthy();
+
+    await user.click(screen.getByText('Setting up the team for the first time?'));
+    await user.type(screen.getByLabelText('Team name'), 'Purdue Ballroom');
+    await user.type(screen.getByLabelText('First competition'), 'Purdue Ballroom Classic');
+    await user.type(screen.getByLabelText('Date'), '2026-11-14');
+    await user.click(screen.getByRole('button', { name: 'Create the team' }));
+
+    expect(await screen.findByRole('heading', { name: 'Who are you?' })).toBeTruthy();
+    expect(access.state.captainUids).toEqual(['founder']);
+  });
+});
+
+describe('Setup for members and captains', () => {
+  it('shows members only this phone’s settings and their account', async () => {
+    const access = fakeAccess();
+    await access.access.join('phone', 'team-code', 'anonymous');
+    await access.access.claimDancer('phone', 'sam', null);
+    await renderApp({
+      tab: 'setup',
+      signedIn: { uid: 'phone', isAnonymous: true, displayName: null, email: null },
+      access,
+    });
+
+    expect(screen.getByText('Joined with the team link on this phone')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Keep me signed in on any device' })).toBeTruthy();
+    expect(screen.queryByText('Team link')).toBeNull();
+    expect(screen.queryByText('Couples & entries')).toBeNull();
+  });
+
+  it('gives captains the team link, and a way to replace it', async () => {
+    const { user } = await renderApp({ tab: 'setup' });
+    const link = screen.getByLabelText('Team link') as HTMLInputElement;
+    expect(link.value).toMatch(/#join=team-code$/);
+
+    await user.click(screen.getByRole('button', { name: 'Make a new link' }));
+    await user.click(screen.getByRole('button', { name: 'Make new link' }));
+    expect((screen.getByLabelText('Team link') as HTMLInputElement).value).toMatch(
+      /#join=fresh-code$/,
+    );
+  });
+
+  it('lets someone change which dancer they are', async () => {
+    const { user, session } = await renderApp({ tab: 'setup' });
+    await user.click(screen.getByRole('button', { name: 'Pick my name' }));
+    await user.click(screen.getByRole('button', { name: 'Jo' }));
+
+    expect(await screen.findByRole('button', { name: 'Change' })).toBeTruthy();
+    expect(session.membership.value?.dancerId).toBe('jo');
   });
 });

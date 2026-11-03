@@ -1,11 +1,15 @@
-/** Composition root: wires the browser adapters into the store and renders the app. */
+/** Composition root: wires Firebase and the browser adapters into the app and renders it. */
 // Global styles first, so component CSS modules can override them.
 import './ui/styles/tokens.css';
 import './ui/styles/base.css';
 import { render } from 'preact';
-import { BACKUP_FORMAT, BACKUP_VERSION } from './app/backup';
+import { createSession } from './app/session';
 import { createAppStore } from './app/store';
-import { localRepository } from './infra/local/localRepository';
+import { FIREBASE_CONFIG, TEAM_ID, USE_EMULATORS } from './infra/firebase/config';
+import { connectFirebase } from './infra/firebase/firebaseApp';
+import { firebaseAuthService } from './infra/firebase/firebaseAuthService';
+import { firestoreAccessRepository } from './infra/firebase/firestoreAccessRepository';
+import { firestoreRepository } from './infra/firebase/firestoreRepository';
 import { preferencesStorage } from './infra/platform/preferencesStorage';
 import { screenWakeLock } from './infra/platform/screenWakeLock';
 import { webAlertOutput } from './infra/platform/webAlertOutput';
@@ -13,39 +17,36 @@ import { browserStorage } from './infra/storage/keyValueStorage';
 import { App } from './ui/App';
 import { createViewState } from './ui/viewState';
 
-const storage = browserStorage();
-// This phone only, until sign-in and Firebase are wired in (milestone 3).
-const repository = localRepository(storage, {
-  seed: {
-    format: BACKUP_FORMAT,
-    version: BACKUP_VERSION,
-    exportedAt: new Date(0).toISOString(),
-    team: { name: 'Purdue Ballroom', activeCompetitionId: 'purdue-classic-2026' },
-    dancers: [],
-    partnerships: [],
-    competitions: [
-      {
-        info: {
-          id: 'purdue-classic-2026',
-          name: 'Purdue Ballroom Classic',
-          date: '2026-11-14',
-          status: 'active',
-        },
-        schedule: { items: [], events: [] },
-        entries: {},
-        floor: { currentItemId: null, currentSetAt: null },
-        callbacks: {},
-      },
-    ],
-  },
+/** Team links look like `…/#join=<code>`. */
+const JOIN_LINK = /^#join=(.+)$/;
+
+const { auth, firestore } = connectFirebase({
+  config: FIREBASE_CONFIG,
+  useEmulators: USE_EMULATORS,
 });
+const storage = browserStorage();
 const alertOutput = webAlertOutput();
+
 const store = createAppStore({
-  repository,
+  repository: firestoreRepository({
+    firestore,
+    teamId: TEAM_ID,
+    currentUid: () => auth.currentUser?.uid ?? null,
+  }),
   preferences: preferencesStorage(storage),
   clock: { now: () => Date.now() },
   alertOutput,
   wakeLock: screenWakeLock(),
+});
+
+const joinCode = JOIN_LINK.exec(location.hash)?.[1];
+const session = createSession({
+  auth: firebaseAuthService(auth),
+  access: firestoreAccessRepository({ firestore, teamId: TEAM_ID }),
+  store,
+  joinCode: joinCode ? decodeURIComponent(joinCode) : null,
+  // The code shouldn't stay in the address bar, where it could be shared by accident.
+  onJoinCodeUsed: () => history.replaceState(null, '', location.pathname + location.search),
 });
 const view = createViewState(storage);
 
@@ -53,5 +54,5 @@ const view = createViewState(storage);
 document.addEventListener('click', () => alertOutput.unlock(), { capture: true });
 
 const root = document.getElementById('app');
-if (root) render(<App store={store} view={view} />, root);
-store.start();
+if (root) render(<App store={store} session={session} view={view} />, root);
+session.start();

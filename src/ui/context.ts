@@ -1,11 +1,13 @@
 import { createContext } from 'preact';
 import { useContext, useEffect, useState } from 'preact/hooks';
 import { minutesSinceMidnight } from '../domain/clock';
+import type { Session } from '../app/session';
 import type { AppStore } from '../app/store';
 import type { ViewState } from './viewState';
 
 export interface AppContextValue {
   store: AppStore;
+  session: Session;
   view: ViewState;
 }
 

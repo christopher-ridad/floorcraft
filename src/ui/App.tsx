@@ -1,7 +1,9 @@
 import type { JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
+import type { Session } from '../app/session';
 import type { AppStore } from '../app/store';
 import { paceStatus } from '../domain/pace';
+import { AccessScreen } from './AccessScreens';
 import { HeatSheet } from './components/HeatSheet';
 import { AppContext, useApp } from './context';
 import { cx, noticeText, paceLabel } from './format';
@@ -12,8 +14,6 @@ import { ScheduleView } from './views/ScheduleView';
 import { SetupView } from './views/SetupView';
 import styles from './App.module.css';
 
-const COMPETITION_NAME = 'Purdue Ballroom Classic';
-
 const VIEWS: Record<Tab, () => JSX.Element | null> = {
   now: NowView,
   schedule: ScheduleView,
@@ -21,21 +21,37 @@ const VIEWS: Record<Tab, () => JSX.Element | null> = {
   setup: SetupView,
 };
 
-export function App({ store, view }: { store: AppStore; view: ViewState }) {
+interface AppProps {
+  store: AppStore;
+  session: Session;
+  view: ViewState;
+}
+
+export function App({ store, session, view }: AppProps) {
   // Alerts, failed saves and other notices from the store show as toasts.
   useEffect(() => store.onNotice((notice) => view.showToast(noticeText(notice))), [store, view]);
-  const CurrentView = VIEWS[view.tab.value];
 
   return (
-    <AppContext.Provider value={{ store, view }}>
+    <AppContext.Provider value={{ store, session, view }}>
+      {session.phase.value === 'ready' ? <HeatSheetApp /> : <AccessScreen />}
+      <Toast />
+    </AppContext.Provider>
+  );
+}
+
+/** The app itself, once this phone is on the team. */
+function HeatSheetApp() {
+  const { view } = useApp();
+  const CurrentView = VIEWS[view.tab.value];
+  return (
+    <>
       <TopBar />
       <main class={styles.main}>
         <CurrentView />
       </main>
       <TabBar />
       <HeatSheet />
-      <Toast />
-    </AppContext.Provider>
+    </>
   );
 }
 
@@ -52,7 +68,8 @@ function TopBar() {
   return (
     <header class={styles.top}>
       <div class={styles.brand}>
-        Heat Sheet<small>{COMPETITION_NAME}</small>
+        Heat Sheet
+        <small>{store.activeCompetition.value?.name ?? store.team.value.team?.name ?? ''}</small>
       </div>
       <div class={styles.spacer} />
       <span class={cx(styles.pace, pace.isOffSchedule && styles.offSchedule)}>{pace.text}</span>

@@ -71,8 +71,9 @@ export interface AppStore {
   competition: ReadonlySignal<Competition>;
   actions: Actions;
   onNotice(listener: NoticeListener): () => void;
-  /** Starts watching the team's data, alerts and keep-awake. */
+  /** Starts watching the team's data, alerts and keep-awake. Does nothing if already started. */
   start(): void;
+  /** Stops watching and clears the team's data. The store can be started again. */
   dispose(): void;
 }
 
@@ -195,6 +196,7 @@ export function createAppStore(deps: AppDependencies): AppStore {
     onNotice: (listener) => notices.subscribe(listener),
 
     start() {
+      if (stops.length) return;
       alertWatcher = watchAlerts({ competition, preferences, output: deps.alertOutput, notices });
       stops.push(
         () => alertWatcher?.dispose(),
@@ -206,6 +208,12 @@ export function createAppStore(deps: AppDependencies): AppStore {
 
     dispose() {
       while (stops.length) stops.pop()?.();
+      // Nothing from a previous session stays on screen (e.g. after signing out).
+      team.value = EMPTY_TEAM;
+      competitionData.value = EMPTY_COMPETITION;
+      loaded.value = { team: false, competition: false };
+      syncMode.value = 'connecting';
+      syncError.value = null;
     },
   };
 }

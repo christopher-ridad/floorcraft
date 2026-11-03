@@ -1,5 +1,6 @@
 /** Wording shown to the user. */
 import type { Notice } from '../app/notices';
+import type { SessionProblem } from '../app/session';
 import { dancerName } from '../domain/dancers';
 import type { PaceStatus } from '../domain/pace';
 import { ROUND_LABELS, type HeatName } from '../domain/schedule/heatName';
@@ -43,6 +44,21 @@ export function noticeText(notice: Notice): string {
       return 'Could not save. Check your connection and try again.';
     case 'wake-lock-refused':
       return 'This browser would not keep the screen on.';
+  }
+}
+
+export function sessionProblemText(problem: SessionProblem): string {
+  switch (problem) {
+    case 'sign-in-failed':
+      return "Sign-in didn't finish. Try again.";
+    case 'account-in-use':
+      return 'That Google account is already used on another phone. Sign out there first, or use a different account.';
+    case 'team-exists':
+      return "The team couldn't be created. It may already exist: ask its captain to add you.";
+    case 'dancer-taken':
+      return 'Someone else already picked that name. If it’s you on another phone, ask your captain to free it up.';
+    case 'network':
+      return "Couldn't reach the team. Check your connection and try again.";
   }
 }
 

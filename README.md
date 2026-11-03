@@ -42,7 +42,7 @@ npm run emulators      # local Firebase (Auth + Firestore) with its UI at http:/
 npm run build          # build the app into one self-contained file: dist/index.html
 npm test               # unit and component tests
 npm run test:emulator  # Firestore security rules and Firebase integration tests (starts the emulators)
-npm run test:e2e       # browser smoke test (run npm run build first; npx playwright install chromium once)
+npm run test:e2e       # builds for the emulators and runs browser tests against them (npx playwright install chromium once)
 npm run check          # lint, formatting, typecheck, tests, and build
 ```
 
@@ -60,4 +60,12 @@ The team's data lives in Firebase (Cloud Firestore): a permanent roster of dance
 
 The app reaches the data through the `HeatSheetRepository` interface in [src/app/ports.ts](src/app/ports.ts), implemented for Firestore in [src/infra/firebase/firestoreRepository.ts](src/infra/firebase/firestoreRepository.ts) and for this-phone-only storage in [src/infra/local/localRepository.ts](src/infra/local/localRepository.ts). A whole team can be saved as one JSON backup ([src/app/backup.ts](src/app/backup.ts)); data from the original Claude-artifact version converts to that format with [src/infra/legacy/legacyBackup.ts](src/infra/legacy/legacyBackup.ts).
 
-Until sign-in is wired in, the app runs on this-phone-only storage. To load the sample data, go to **Setup** and paste `data/schedule-2025-tentative.txt` and `data/partnerships-2026.txt` into the two import boxes.
+## Getting in
+
+- **Captains** sign in with Google. The first Google account to open the app can create the team and becomes its captain.
+- **Teammates** open the team link the captain shares (**Setup → Team link**), then pick their name. No account needed; a teammate can optionally link a Google account to keep their spot on any device.
+- **Setup** shows only this phone's settings to teammates; captains also get the team link, the schedule, and couples. The rules in [firestore.rules](firestore.rules) enforce this on the server.
+
+## Trying it locally
+
+`npm run emulators` starts local Firebase, and `npm run dev` serves the app against it. Sign in as captain with the emulator's fake Google sign-in, create the team, then paste `data/schedule-2025-tentative.txt` and `data/partnerships-2026.txt` into **Setup**. Open the team link in another browser to join as a teammate.

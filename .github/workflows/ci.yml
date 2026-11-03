@@ -28,9 +28,11 @@ jobs:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ hashFiles('package-lock.json') }}
       - run: npm run test:emulator
-      - run: npm run build
       - run: npx playwright install --with-deps chromium
+      # Builds the app in emulator mode and tests it in a browser against the emulators.
       - run: npm run test:e2e
+      # The production build comes last: it's what gets published.
+      - run: npm run build
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

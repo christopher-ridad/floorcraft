@@ -97,6 +97,21 @@ export function createActions(ctx: ActionContext) {
   }
 
   return {
+    // ---- Competitions ----
+
+    /**
+     * Creates a competition and makes it the one everyone sees; the previous one is archived.
+     * Returns the new competition's id.
+     */
+    startCompetition(name: string, date: string): string {
+      const id = ctx.createId();
+      const previous = ctx.activeCompetition.peek();
+      if (previous) save(repository.saveCompetition({ ...previous, status: 'archived' }));
+      save(repository.saveCompetition({ id, name: name.trim(), date, status: 'active' }));
+      save(repository.updateTeam({ activeCompetitionId: id }));
+      return id;
+    },
+
     // ---- The floor ----
 
     /** The next item is on the floor now. */

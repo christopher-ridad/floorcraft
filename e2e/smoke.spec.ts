@@ -1,61 +1,68 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+/**
+ * The built app, served and talking to the Firebase emulators: two phones join with the team link,
+ * and what one does shows up on the other. Run with `npm run test:e2e`.
+ */
 import { expect, test, type Page } from '@playwright/test';
+import { closeSeed, JOIN_CODE, seedTeam } from './seed';
 
-// Paths are relative to the project root, where Playwright runs.
-const appUrl = pathToFileURL(resolve('dist/index.html')).href;
-const sample = (file: string) => readFileSync(resolve('data', file), 'utf8');
+test.beforeEach(() => seedTeam());
+test.afterAll(() => closeSeed());
 
 const tab = (page: Page, name: string) =>
   page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name });
 
-test('runs a competition morning on this phone only', async ({ page }) => {
+/** Opens the app on a fresh phone with the team link and picks a name. */
+async function joinAs(page: Page, name: string) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   // Fonts come from Google; the app must work without them.
   await page.route('https://fonts.googleapis.com/**', (route) => route.abort());
 
-  await page.goto(appUrl);
-  await expect(page.getByRole('img', { name: 'This phone only' })).toBeVisible();
-  await expect(page.getByText('No schedule yet')).toBeVisible();
+  await page.goto(`/#join=${JOIN_CODE}`);
+  await expect(page.getByRole('heading', { name: 'Who are you?' })).toBeVisible();
+  // The join code is cleared from the address bar once used.
+  await expect.poll(() => new URL(page.url()).hash).toBe('');
+  await page.getByRole('button', { name, exact: true }).click();
+  await expect(page.getByText(`${name}, your next heat`)).toBeVisible();
+  return errors;
+}
 
-  // Load the sample schedule and partnerships.
-  await page.getByRole('button', { name: 'Open Setup' }).click();
-  await page.getByLabel('Schedule text').fill(sample('schedule-2025-tentative.txt'));
-  await expect(page.getByText('139 heats found')).toBeVisible();
-  await page.getByRole('button', { name: 'Replace schedule' }).click();
-  await expect(page.getByRole('status')).toHaveText('Schedule replaced: 139 heats.');
+test('two phones join with the team link and see each other’s changes', async ({ browser }) => {
+  const chrisPhone = await (await browser.newContext()).newPage();
+  const brookePhone = await (await browser.newContext()).newPage();
+  const chrisErrors = await joinAs(chrisPhone, 'Chris');
+  const brookeErrors = await joinAs(brookePhone, 'Brooke');
 
-  await page.getByLabel('Partnerships text').fill(sample('partnerships-2026.txt'));
-  await page.getByRole('button', { name: 'Replace couples' }).click();
-  await expect(page.getByRole('status')).toHaveText('20 couples loaded.');
-  await expect(page.getByText(/doesn’t match any heat|don’t match any heat/)).toHaveCount(0);
+  // Chris is taken now, so a third phone can't pick that name.
+  const thirdPhone = await (await browser.newContext()).newPage();
+  await thirdPhone.goto(`/#join=${JOIN_CODE}`);
+  await expect(thirdPhone.getByRole('button', { name: /^Chris/ })).toBeDisabled();
 
-  // Pick who this phone alerts for.
-  await page.getByLabel('I am').selectOption('Chris');
+  // Brooke's phone starts the competition; Chris's phone follows along.
+  await brookePhone.getByRole('button', { name: 'First heat is on the floor' }).click();
+  await brookePhone.getByRole('button', { name: 'Next heat is up' }).click();
+  await expect(chrisPhone.getByText(/On the floor · Heat 1/)).toBeVisible();
 
-  // Start the competition and move through the first heats.
-  await tab(page, 'Now').click();
-  await expect(page.getByText('Chris, your next heat')).toBeVisible();
-  await page.getByRole('button', { name: 'First heat is on the floor' }).click();
-  await expect(page.getByText('American Style Smooth Events')).toBeVisible();
-  await page.getByRole('button', { name: 'Next heat is up' }).click();
-  await expect(page.getByText(/On the floor · Heat 1/)).toBeVisible();
+  // Members see their phone's settings, not the captain's setup.
+  await tab(chrisPhone, 'Setup').click();
+  await expect(chrisPhone.getByText('Joined with the team link on this phone')).toBeVisible();
+  await expect(chrisPhone.getByText('Couples & entries')).toHaveCount(0);
 
-  // The schedule tab shows the team's heats with the floor marked.
-  await tab(page, 'Schedule').click();
-  await expect(page.getByRole('button', { name: 'Team Schedule' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await expect(page.locator('[data-now]')).toHaveCount(1);
+  // The phone stays on the team after a reload.
+  await chrisPhone.reload();
+  await tab(chrisPhone, 'Now').click();
+  await expect(chrisPhone.getByText(/On the floor · Heat 1/)).toBeVisible();
 
-  // Everything survives a reload, including the tab.
-  await page.reload();
-  await expect(page.locator('[data-now]')).toHaveCount(1);
-  await tab(page, 'Now').click();
-  await expect(page.getByText(/On the floor · Heat 1/)).toBeVisible();
+  expect([...chrisErrors, ...brookeErrors]).toEqual([]);
+});
 
-  expect(errors).toEqual([]);
+test('a visitor without the link is asked for it', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByText(/open the link your captain sent you/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Captain? Sign in with Google' })).toBeVisible();
+});
+
+test('an old link is refused', async ({ page }) => {
+  await page.goto('/#join=not-the-code');
+  await expect(page.getByRole('heading', { name: "That join link didn't work" })).toBeVisible();
 });

@@ -1,0 +1,272 @@
+import { computed, effect, signal } from '@preact/signals-core';
+import { dancerName } from '../domain/dancers';
+import { generateJoinCode } from './joinCode';
+import {
+  AuthFailure,
+  type AccessRepository,
+  type AuthService,
+  type AuthUser,
+  type TeamAccess,
+} from './ports';
+import type { AppStore } from './store';
+
+/**
+ * Where this phone is on the way into the team:
+ * - `loading`: working out who is signed in and what they can see.
+ * - `signed-out`: nobody is signed in and there's no join link.
+ * - `joining`: using a join link.
+ * - `join-failed`: the join link didn't work.
+ * - `not-member`: signed in, but not on the team (a Google account can create the team here).
+ * - `choose-dancer`: on the team; picking which dancer this phone belongs to.
+ * - `ready`: in.
+ */
+export type SessionPhase =
+  'loading' | 'signed-out' | 'joining' | 'join-failed' | 'not-member' | 'choose-dancer' | 'ready';
+
+/** Something the person tried that didn't work; the UI words it. */
+export type SessionProblem =
+  'sign-in-failed' | 'account-in-use' | 'team-exists' | 'dancer-taken' | 'network';
+
+export interface SessionDependencies {
+  auth: AuthService;
+  access: AccessRepository;
+  store: AppStore;
+  /** The code from a join link this page was opened with, if any. */
+  joinCode: string | null;
+  /** Called once the join code has been used, so the link can be cleared from the address bar. */
+  onJoinCodeUsed(): void;
+  createJoinCode?: () => string;
+}
+
+export type Session = ReturnType<typeof createSession>;
+export type SessionActions = Session['actions'];
+
+const problemFor = (error: unknown): SessionProblem => {
+  if (error instanceof AuthFailure && error.code === 'account-in-use') return 'account-in-use';
+  if (error instanceof AuthFailure) return 'sign-in-failed';
+  return 'network';
+};
+
+export function createSession(deps: SessionDependencies) {
+  const { auth, access, store } = deps;
+  const createJoinCode = deps.createJoinCode ?? (() => generateJoinCode());
+
+  const user = signal<AuthUser | null | undefined>(undefined);
+  const teamAccess = signal<TeamAccess | undefined>(undefined);
+  const joinState = signal<'idle' | 'joining' | 'failed'>(deps.joinCode ? 'joining' : 'idle');
+  const claims = signal<Record<string, string>>({});
+  const joinCode = signal<string | null>(null);
+  const problem = signal<SessionProblem | null>(null);
+  /** Set while the person is changing which dancer they are. */
+  const isChoosingDancer = signal(false);
+  let pendingJoinCode = deps.joinCode;
+
+  const membership = computed(() =>
+    teamAccess.value?.kind === 'team' ? teamAccess.value.membership : null,
+  );
+  const isCaptain = computed(() => teamAccess.value?.kind === 'team' && teamAccess.value.isCaptain);
+
+  const phase = computed<SessionPhase>(() => {
+    if (joinState.value === 'joining') return 'joining';
+    if (joinState.value === 'failed') return 'join-failed';
+    if (user.value === undefined) return 'loading';
+    if (user.value === null) return 'signed-out';
+    const current = teamAccess.value;
+    if (!current) return 'loading';
+    if (current.kind === 'none') return 'not-member';
+    if (!current.membership) return 'loading';
+    if (isChoosingDancer.value) return 'choose-dancer';
+    const skipped = store.preferences.value.skipDancerClaim;
+    return current.membership.dancerId || skipped ? 'ready' : 'choose-dancer';
+  });
+
+  const stops: (() => void)[] = [];
+  let stopTeamWatchers: (() => void)[] = [];
+  let stopAccess: (() => void) | null = null;
+
+  function stopWatchingTeam() {
+    stopTeamWatchers.forEach((stop) => stop());
+    stopTeamWatchers = [];
+    store.dispose();
+    claims.value = {};
+    joinCode.value = null;
+  }
+
+  function useJoinCode(): string | null {
+    const code = pendingJoinCode;
+    if (code) {
+      pendingJoinCode = null;
+      deps.onJoinCodeUsed();
+    }
+    return code;
+  }
+
+  async function joinWith(signedIn: AuthUser, code: string) {
+    joinState.value = 'joining';
+    try {
+      await access.join(signedIn.uid, code, signedIn.isAnonymous ? 'anonymous' : 'google');
+      joinState.value = 'idle';
+      watchAccess(signedIn);
+    } catch {
+      joinState.value = 'failed';
+    }
+  }
+
+  function onAccess(signedIn: AuthUser, next: TeamAccess) {
+    teamAccess.value = next;
+    if (next.kind === 'none') {
+      stopWatchingTeam();
+      const code = useJoinCode();
+      if (code) void joinWith(signedIn, code);
+      else if (joinState.peek() === 'joining') joinState.value = 'idle';
+      return;
+    }
+
+    // Already on the team: a join link has nothing left to do.
+    useJoinCode();
+    joinState.value = 'idle';
+    if (!stopTeamWatchers.length) {
+      store.start();
+      stopTeamWatchers.push(access.watchClaims((value) => (claims.value = value)));
+      if (next.isCaptain) {
+        stopTeamWatchers.push(access.watchJoinCode((value) => (joinCode.value = value)));
+      }
+    }
+    if (next.isCaptain && !next.membership) {
+      access.joinAsCaptain(signedIn.uid).catch(() => (problem.value = 'network'));
+    }
+  }
+
+  function watchAccess(signedIn: AuthUser) {
+    stopAccess?.();
+    stopAccess = access.watchAccess(signedIn.uid, (next) => onAccess(signedIn, next));
+  }
+
+  function onUserChange(next: AuthUser | null) {
+    stopAccess?.();
+    stopAccess = null;
+    stopWatchingTeam();
+    teamAccess.value = undefined;
+    user.value = next;
+    if (next) {
+      watchAccess(next);
+    } else if (pendingJoinCode) {
+      joinState.value = 'joining';
+      auth.signInAnonymously().catch(() => (joinState.value = 'failed'));
+    }
+  }
+
+  /** Alerts follow the dancer this phone belongs to, unless the person picked someone else. */
+  function followClaimedDancer() {
+    return effect(() => {
+      const dancerId = membership.value?.dancerId;
+      const dancer = store.team.value.dancers.find((candidate) => candidate.id === dancerId);
+      if (dancer && !store.preferences.peek().dancer) {
+        store.actions.updatePreferences({ dancer: dancerName(dancer.name) });
+      }
+    });
+  }
+
+  async function attempt(run: () => Promise<void>) {
+    problem.value = null;
+    try {
+      await run();
+    } catch (error) {
+      problem.value = problemFor(error);
+    }
+  }
+
+  const actions = {
+    /** Captains sign in with Google. */
+    signInAsCaptain: () => attempt(() => auth.signInWithGoogle()),
+
+    /**
+     * Creates the team with this Google account as captain, and its first competition.
+     * Fails with `team-exists` if the team can't be created (usually: someone already did).
+     */
+    async createTeam(teamName: string, competitionName: string, date: string) {
+      problem.value = null;
+      const signedIn = user.peek();
+      if (!signedIn || signedIn.isAnonymous) {
+        problem.value = 'sign-in-failed';
+        return;
+      }
+      try {
+        await access.createTeam(signedIn.uid, teamName.trim(), createJoinCode());
+      } catch {
+        problem.value = 'team-exists';
+        return;
+      }
+      store.actions.startCompetition(competitionName, date);
+      watchAccess(signedIn);
+    },
+
+    /** Links this phone to a dancer. Fails with `dancer-taken` if another phone has them. */
+    chooseDancer: (dancerId: string) =>
+      attempt(async () => {
+        const signedIn = user.peek();
+        const current = membership.peek();
+        if (!signedIn || !current) return;
+        try {
+          await access.claimDancer(signedIn.uid, dancerId, current.dancerId);
+        } catch {
+          problem.value = 'dancer-taken';
+          return;
+        }
+        const dancer = store.team.peek().dancers.find((candidate) => candidate.id === dancerId);
+        store.actions.updatePreferences({
+          dancer: dancer ? dancerName(dancer.name) : '',
+          skipDancerClaim: false,
+        });
+        isChoosingDancer.value = false;
+      }),
+
+    /** This phone doesn't belong to a dancer (e.g. a captain who isn't dancing). */
+    skipChoosingDancer() {
+      store.actions.updatePreferences({ skipDancerClaim: true });
+      isChoosingDancer.value = false;
+    },
+
+    /** Goes back to picking which dancer this phone belongs to. */
+    changeDancer() {
+      problem.value = null;
+      isChoosingDancer.value = true;
+    },
+
+    /** Keeps this member's identity on any device by linking a Google account. */
+    linkWithGoogle: () =>
+      attempt(async () => {
+        const signedIn = user.peek();
+        if (!signedIn) return;
+        await auth.linkWithGoogle();
+        await access.setProvider(signedIn.uid, 'google');
+      }),
+
+    signOut: () => attempt(() => auth.signOut()),
+
+    /** Makes a new join link; the old one stops working. Captains only. */
+    replaceJoinCode: () => attempt(() => access.setJoinCode(createJoinCode())),
+  };
+
+  return {
+    phase,
+    user: computed(() => user.value ?? null),
+    membership,
+    isCaptain,
+    claims,
+    joinCode,
+    problem,
+    actions,
+
+    start() {
+      if (stops.length) return;
+      stops.push(auth.onUserChange(onUserChange), followClaimedDancer());
+    },
+
+    dispose() {
+      stopAccess?.();
+      stopWatchingTeam();
+      while (stops.length) stops.pop()?.();
+    },
+  };
+}

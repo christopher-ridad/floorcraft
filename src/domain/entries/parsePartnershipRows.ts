@@ -1,5 +1,3 @@
-import { randomId, type Couple, type IdFactory } from '../types';
-
 const LEVEL = '(?:Newcomer|Bronze|Silver|Gold|Novice|Pre-Champ|Championship)';
 /** The level column in space-separated rows, e.g. `Bronze, Silver `. */
 const LEVEL_COLUMN = new RegExp(`^(${LEVEL}(?:\\s*,\\s*${LEVEL})*)\\s+(?=\\S)`, 'i');
@@ -7,13 +5,22 @@ const HEADER_ROW = /^lead\b/i;
 const SHEET_TITLE_ROW = /spreadsheet$/i;
 const NAME_NOTE = /^\(.*\)$/;
 
+/** One row of the partnerships spreadsheet. */
+export interface PartnershipRow {
+  lead: string;
+  /** `TBA` when the sheet leaves it blank. */
+  follow: string;
+  /** Event names as written, e.g. `Silver I. Standard (TF)`. */
+  entries: string[];
+}
+
 /**
  * Parses rows from the partnerships spreadsheet: lead, follow, level, then events separated by
  * commas. Rows can be tab-separated (copied from the sheet) or space-separated.
  * Rows without a lead or any events are skipped.
  */
-export function parseEntries(text: string, createId: IdFactory = randomId): Couple[] {
-  const couples: Couple[] = [];
+export function parsePartnershipRows(text: string): PartnershipRow[] {
+  const rows: PartnershipRow[] = [];
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || HEADER_ROW.test(line) || SHEET_TITLE_ROW.test(line)) continue;
@@ -27,25 +34,25 @@ export function parseEntries(text: string, createId: IdFactory = randomId): Coup
       .filter(Boolean);
     if (!lead || !entries.length) continue;
 
-    couples.push({ id: createId(), lead, follow: follow || 'TBA', entries, manualMatches: [] });
+    rows.push({ lead, follow: follow || 'TBA', entries });
   }
-  return couples;
+  return rows;
 }
 
-interface Row {
+interface Columns {
   lead: string;
   follow: string;
   events: string;
 }
 
-function splitTabSeparatedRow(line: string): Row {
+function splitTabSeparatedRow(line: string): Columns {
   const [lead = '', follow = '', levelOrEvents = '', ...eventColumns] = line
     .split('\t')
     .map((cell) => cell.trim());
   return { lead, follow, events: eventColumns.join(', ') || levelOrEvents };
 }
 
-function splitSpaceSeparatedRow(line: string): Row {
+function splitSpaceSeparatedRow(line: string): Columns {
   const words = line.split(/\s+/);
   const lead = takeName(words);
   const follow = takeName(words);

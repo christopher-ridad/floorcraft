@@ -1,20 +1,29 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, render, screen, within } from '@testing-library/preact';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import type { CompetitionDocuments } from '../../src/app/ports';
+import type { AuthUser } from '../../src/app/ports';
 import type { Preferences } from '../../src/app/preferences';
-import { createAppStore, EMPTY_LIVE } from '../../src/app/store';
+import { createSession } from '../../src/app/session';
+import { createAppStore } from '../../src/app/store';
+import type { FloorState } from '../../src/domain/types';
+import { backupFromLegacy } from '../../src/infra/legacy/legacyBackup';
 import { memoryStorage } from '../../src/infra/storage/keyValueStorage';
 import { App } from '../../src/ui/App';
 import { createViewState, type Tab } from '../../src/ui/viewState';
-import { at, couples, schedule } from '../domain/fixture';
+import { at } from '../domain/fixture';
 import {
+  COMPETITION_ID,
+  fakeAccess,
   fakeAlertOutput,
-  fakeConnector,
+  fakeAuth,
   fakePreferences,
+  fakeRepository,
   fakeWakeLock,
-  FakeSync,
+  fixtureBackup,
+  settle,
 } from '../app/fakes';
 
 beforeAll(() => {
@@ -23,33 +32,63 @@ beforeAll(() => {
 });
 afterEach(cleanup);
 
+const captain: AuthUser = {
+  uid: 'captain',
+  isAnonymous: false,
+  displayName: 'Casey',
+  email: 'casey@example.com',
+};
+
 interface Options {
   tab?: Tab;
   preferences?: Partial<Preferences>;
-  live?: CompetitionDocuments['live'];
+  floor?: FloorState;
+  /** Who is signed in; by default the team's captain, who isn't dancing. */
+  signedIn?: AuthUser | null;
+  joinCode?: string | null;
+  access?: ReturnType<typeof fakeAccess>;
+  isOnline?: boolean;
 }
 
-async function renderApp({ tab = 'now', preferences, live = EMPTY_LIVE }: Options = {}) {
-  const shared = new FakeSync('shared', { schedule, entries: couples, live });
+async function renderApp({
+  tab = 'now',
+  preferences,
+  floor,
+  signedIn = captain,
+  joinCode = null,
+  access = fakeAccess({ captainUids: ['captain'] }),
+  isOnline = true,
+}: Options = {}) {
+  const backend = fakeRepository(fixtureBackup({ floor }));
   const store = createAppStore({
-    sync: fakeConnector(Promise.resolve(shared)).connector,
-    preferences: fakePreferences(preferences).store,
+    repository: backend.repository,
+    preferences: fakePreferences({ skipDancerClaim: signedIn === captain, ...preferences }).store,
     clock: { now: () => at(9, 20) },
     alertOutput: fakeAlertOutput().output,
     wakeLock: fakeWakeLock(true).wakeLock,
+    connectivity: { isOnline: () => isOnline, onChange: () => () => {} },
     createId: (() => {
       let next = 0;
       return () => `new${++next}`;
     })(),
   });
+  const auth = fakeAuth({ signedIn });
+  const session = createSession({
+    auth: auth.auth,
+    access: access.access,
+    store,
+    joinCode,
+    onJoinCodeUsed: () => {},
+    createJoinCode: () => 'fresh-code',
+  });
   const view = createViewState(memoryStorage({ 'floorcraft:tab': tab }));
-  render(<App store={store} view={view} />);
-  await store.start();
-  return { store, shared, user: userEvent.setup() };
+  render(<App store={store} session={session} view={view} />);
+  session.start();
+  await settle();
+  return { store, session, backend, access, auth, user: userEvent.setup() };
 }
 
-const onTheFloor = (itemId: string, setAt = at(9, 0)) => ({
-  ...EMPTY_LIVE,
+const onTheFloor = (itemId: string, setAt = at(9, 0)): FloorState => ({
   currentItemId: itemId,
   currentSetAt: setAt,
 });
@@ -74,24 +113,32 @@ describe('Now tab', () => {
   });
 
   it('counts down the heats and alerts when you are on deck', async () => {
-    const { shared } = await renderApp({ preferences: { dancer: 'Chris' } });
-    shared.emit('live', onTheFloor('h0'));
+    const { backend } = await renderApp({ preferences: { dancer: 'Chris' } });
+    await backend.otherPhone.saveFloor(COMPETITION_ID, onTheFloor('h0'));
 
     expect(await screen.findByText('On deck')).toBeTruthy();
     expect(screen.getByRole('status').textContent).toBe("You're on deck. Next heat is yours.");
   });
 
+  it('does not say you are on the floor for a heat you only dance if called back', async () => {
+    // Jo's semi-final (h3) is on the floor, but Jo hasn't been marked as called back.
+    await renderApp({ preferences: { dancer: 'Jo' }, floor: onTheFloor('h3') });
+    expect(await screen.findByText('Jo, waiting on a callback')).toBeTruthy();
+    expect(screen.getByText(/On the floor now, if you were called back/)).toBeTruthy();
+    expect(screen.queryByText('Jo, you are')).toBeNull();
+  });
+
   it('says when you are waiting on a callback', async () => {
-    await renderApp({ preferences: { dancer: 'Jo' }, live: onTheFloor('h2') });
+    await renderApp({ preferences: { dancer: 'Jo' }, floor: onTheFloor('h2') });
     expect(await screen.findByText('Jo, waiting on a callback')).toBeTruthy();
   });
 
   it('asks for callbacks once a round is danced, and records them', async () => {
-    const { store, user } = await renderApp({ live: onTheFloor('h4') });
+    const { store, user } = await renderApp({ floor: onTheFloor('h4') });
     expect(await screen.findByText('Callbacks to enter · 2')).toBeTruthy();
 
     await user.click(screen.getAllByRole('button', { name: 'Called back' })[0] as HTMLElement);
-    expect(store.live.value.callbacks).toEqual({ c1_1: { reachedRound: 4, eliminated: false } });
+    expect(store.live.value.callbacks).toEqual({ c1_e1: { reachedRound: 4, eliminated: false } });
     expect(screen.getByRole('status').textContent).toBe('Callback saved.');
     // Chris & Brooke danced the semi already, so they're now asked about the final, which
     // sorts them after Sam & Jo.
@@ -99,13 +146,31 @@ describe('Now tab', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Not called back' })[0] as HTMLElement);
     expect(store.live.value.callbacks).toMatchObject({
-      c3_1: { reachedRound: 1, eliminated: true },
+      c3_e1: { reachedRound: 1, eliminated: true },
     });
     expect(await screen.findByText('Callbacks to enter · 1')).toBeTruthy();
   });
 
+  it('flags callbacks still not entered once the next round has started', async () => {
+    await renderApp({ floor: onTheFloor('h5') });
+    expect(await screen.findByText('Callbacks to enter · 3')).toBeTruthy();
+    expect(screen.getAllByText('Overdue')).toHaveLength(2);
+    expect(screen.getAllByText(/The Semi has started. Were they called back?/)).toHaveLength(2);
+  });
+
+  it('shows when the phone is offline, with changes waiting to sync', async () => {
+    const { store, backend } = await renderApp({ isOnline: false });
+    expect(screen.getByText('Offline')).toBeTruthy();
+
+    backend.holdWrites();
+    store.actions.advanceFloor();
+    expect(await screen.findByText('Offline · 1 change waiting')).toBeTruthy();
+    backend.releaseWrites();
+    expect(await screen.findByText('Offline')).toBeTruthy();
+  });
+
   it('moves the floor with Next and Back, showing the pace', async () => {
-    const { user } = await renderApp({ live: onTheFloor('h3', at(9, 5)) });
+    const { user } = await renderApp({ floor: onTheFloor('h3', at(9, 5)) });
     expect(await screen.findByText('10 min behind')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Next heat is up' }));
@@ -153,14 +218,14 @@ describe('heat sheet', () => {
   });
 
   it('records a callback for one couple and can undo it', async () => {
-    const { store, user } = await renderApp({ tab: 'schedule', live: onTheFloor('h3') });
+    const { store, user } = await renderApp({ tab: 'schedule', floor: onTheFloor('h3') });
     await user.click((await screen.findAllByText('Bronze Amer. Smooth (WT)'))[1] as HTMLElement);
     const sheet = screen.getByRole('dialog');
 
     await user.click(
       within(sheet).getAllByRole('button', { name: 'Called back' })[0] as HTMLElement,
     );
-    expect(store.live.value.callbacks).toEqual({ c1_1: { reachedRound: 4, eliminated: false } });
+    expect(store.live.value.callbacks).toEqual({ c1_e1: { reachedRound: 4, eliminated: false } });
 
     await user.click(await within(sheet).findByRole('button', { name: 'Undo' }));
     expect(store.live.value.callbacks).toEqual({});
@@ -210,20 +275,154 @@ describe('Setup tab', () => {
     expect(screen.getByRole('status').textContent).toBe('Schedule replaced: 1 heats.');
   });
 
-  it('flags unmatched entries and lets you pick the event', async () => {
+  it('flags entries for events no longer on the schedule, and edits a couple’s events', async () => {
     const { store, user } = await renderApp({ tab: 'setup' });
-    expect(await screen.findByText(/1 entry doesn’t match any heat/)).toBeTruthy();
+    expect(await screen.findByText(/1 entry is for events no longer on the schedule/)).toBeTruthy();
 
     await user.click(screen.getByText('Pat & TBA'));
     await user.selectOptions(
-      screen.getByLabelText('Pick event for Gold Intl. Tango'),
+      screen.getAllByLabelText('Add event')[2] as HTMLElement,
       '3 · Newcomer Intl. Cha Cha',
     );
-    expect(store.competition.value.unmatchedEntries).toEqual([]);
+    await user.click(screen.getAllByRole('button', { name: 'Add' })[2] as HTMLElement);
+    await user.click(screen.getByRole('button', { name: 'Remove missing event' }));
+
+    expect(store.competition.value.entries['c4']).toEqual(['e3']);
+    expect(store.competition.value.missingEntries).toEqual([]);
   });
 
   it('shows that the sheet is shared', async () => {
     await renderApp({ tab: 'setup' });
     expect(await screen.findByText('Shared with the team.')).toBeTruthy();
+  });
+});
+
+describe('getting in', () => {
+  it('asks a visitor without a link to get one, and lets the captain sign in', async () => {
+    const { user } = await renderApp({
+      signedIn: null,
+      access: fakeAccess({ captainUids: ['google-user'] }),
+      preferences: { skipDancerClaim: true },
+    });
+    expect(screen.getByText(/open the link your captain sent you/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Captain? Sign in with Google' }));
+    expect(await screen.findByText('Competition not started')).toBeTruthy();
+  });
+
+  it('joins with the team link and asks who you are', async () => {
+    const { user, session } = await renderApp({ signedIn: null, joinCode: 'team-code' });
+    expect(screen.getByRole('heading', { name: 'Who are you?' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Chris' }));
+    expect(await screen.findByText('Chris, your next heat')).toBeTruthy();
+    expect(session.membership.value?.dancerId).toBe('chris');
+  });
+
+  it('shows names other phones have taken', async () => {
+    const access = fakeAccess();
+    await access.access.join('other', 'team-code', 'anonymous');
+    await access.access.claimDancer('other', 'chris', null);
+    await renderApp({ signedIn: null, joinCode: 'team-code', access });
+
+    const chris = screen.getByRole('button', { name: /^Chris/ }) as HTMLButtonElement;
+    expect(chris.disabled).toBe(true);
+    expect(within(chris).getByText('Taken')).toBeTruthy();
+  });
+
+  it('explains a join link that no longer works', async () => {
+    await renderApp({ signedIn: null, joinCode: 'old-code' });
+    expect(screen.getByRole('heading', { name: "That join link didn't work" })).toBeTruthy();
+  });
+
+  it('lets a Google account create the team the first time', async () => {
+    const access = fakeAccess({ teamExists: false });
+    const { user } = await renderApp({
+      signedIn: { ...captain, uid: 'founder' },
+      access,
+    });
+    expect(screen.getByRole('heading', { name: "You're not on the team yet" })).toBeTruthy();
+
+    await user.click(screen.getByText('Setting up the team for the first time?'));
+    await user.type(screen.getByLabelText('Team name'), 'Purdue Ballroom');
+    await user.type(screen.getByLabelText('First competition'), 'Purdue Ballroom Classic');
+    await user.type(screen.getByLabelText('Date'), '2026-11-14');
+    await user.click(screen.getByRole('button', { name: 'Create the team' }));
+
+    expect(await screen.findByRole('heading', { name: 'Who are you?' })).toBeTruthy();
+    expect(access.state.captainUids).toEqual(['founder']);
+  });
+});
+
+describe('Setup for members and captains', () => {
+  it('shows members only this phone’s settings and their account', async () => {
+    const access = fakeAccess();
+    await access.access.join('phone', 'team-code', 'anonymous');
+    await access.access.claimDancer('phone', 'sam', null);
+    await renderApp({
+      tab: 'setup',
+      signedIn: { uid: 'phone', isAnonymous: true, displayName: null, email: null },
+      access,
+    });
+
+    expect(screen.getByText('Joined with the team link on this phone')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Keep me signed in on any device' })).toBeTruthy();
+    expect(screen.queryByText('Team link')).toBeNull();
+    expect(screen.queryByText('Couples & entries')).toBeNull();
+  });
+
+  it('gives captains the team link, and a way to replace it', async () => {
+    const { user } = await renderApp({ tab: 'setup' });
+    const link = screen.getByLabelText('Team link') as HTMLInputElement;
+    expect(link.value).toMatch(/#join=team-code$/);
+
+    await user.click(screen.getByRole('button', { name: 'Make a new link' }));
+    await user.click(screen.getByRole('button', { name: 'Make new link' }));
+    expect((screen.getByLabelText('Team link') as HTMLInputElement).value).toMatch(
+      /#join=fresh-code$/,
+    );
+  });
+
+  it('lets someone change which dancer they are', async () => {
+    const { user, session } = await renderApp({ tab: 'setup' });
+    await user.click(screen.getByRole('button', { name: 'Pick my name' }));
+    await user.click(screen.getByRole('button', { name: 'Jo' }));
+
+    expect(await screen.findByRole('button', { name: 'Change' })).toBeTruthy();
+    expect(session.membership.value?.dancerId).toBe('jo');
+  });
+});
+
+describe('backups', () => {
+  const backupFile = (contents: unknown) =>
+    new File([JSON.stringify(contents)], 'backup.json', { type: 'application/json' });
+
+  it('restores the migrated Purdue data from a file', async () => {
+    const legacy = (name: string): unknown =>
+      JSON.parse(readFileSync(resolve('tests/fixtures/legacy-artifact', `${name}.json`), 'utf8'));
+    const { backup } = backupFromLegacy(
+      { schedule: legacy('schedule'), entries: legacy('entries') },
+      { name: 'Purdue Ballroom Classic', date: '2026-11-14', status: 'active' },
+      () => crypto.randomUUID(),
+    );
+    const { user, store } = await renderApp({ tab: 'setup' });
+
+    await user.upload(screen.getByLabelText('Restore from a backup'), backupFile(backup));
+    expect(await screen.findByText(/makes/, { exact: false })).toBeTruthy();
+    expect(screen.getByText('Purdue Ballroom Classic', { selector: 'b' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Restore' }));
+
+    expect(store.activeCompetition.value?.name).toBe('Purdue Ballroom Classic');
+    expect(store.schedule.value).toHaveLength(147);
+    expect(screen.getByRole('status').textContent).toBe('Backup restored.');
+  });
+
+  it('refuses a file that isn’t a backup', async () => {
+    const { user, store } = await renderApp({ tab: 'setup' });
+    await user.upload(screen.getByLabelText('Restore from a backup'), backupFile({ hello: 1 }));
+
+    expect(await screen.findByText('This is not a team backup file.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
+    expect(store.activeCompetition.value?.name).toBe('Classic');
   });
 });

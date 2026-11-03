@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'preact/hooks';
-import type { EntryMatch } from '../../domain/competition';
 import type { CompetitionEvent } from '../../domain/schedule/eventCatalog';
 import type { Couple } from '../../domain/types';
 import { useApp } from '../context';
 import { coupleName, cx } from '../format';
 import styles from './SetupView.module.css';
 
-/** Edit couples, their names, and which event each entry counts toward. */
+/** Edit couples, their names, and the events they're entered in. */
 export function CouplesEditor() {
   const { store, view } = useApp();
   const competition = store.competition.value;
-  const unmatched = competition.unmatchedEntries.length;
+  const missing = competition.missingEntries.length;
   const events = [...competition.events.values()].sort((a, b) => a.eventNumber - b.eventNumber);
   const [lead, setLead] = useState('');
   const [follow, setFollow] = useState('');
@@ -26,10 +25,10 @@ export function CouplesEditor() {
 
   return (
     <>
-      {!!unmatched && (
+      {!!missing && (
         <div class="banner">
-          {unmatched} {unmatched > 1 ? 'entries don’t' : 'entry doesn’t'} match any heat on the
-          schedule. Pick the right event below.
+          {missing} {missing > 1 ? 'entries are' : 'entry is'} for events no longer on the schedule.
+          Remove {missing > 1 ? 'them' : 'it'} or pick the new event below.
         </div>
       )}
       <div class="card">
@@ -38,7 +37,7 @@ export function CouplesEditor() {
             <CoupleEditor
               key={couple.id}
               couple={couple}
-              matches={competition.entryMatches.get(couple.id) ?? []}
+              eventIds={competition.entries[couple.id] ?? []}
               events={events}
             />
           ))
@@ -71,7 +70,8 @@ export function CouplesEditor() {
 
 interface CoupleEditorProps {
   couple: Couple;
-  matches: readonly EntryMatch[];
+  /** Every event the couple is entered in, including ones no longer on the schedule. */
+  eventIds: readonly string[];
   events: readonly CompetitionEvent[];
 }
 
@@ -80,15 +80,15 @@ function EventOptions({ events, prompt }: { events: readonly CompetitionEvent[];
     <>
       <option value="">{prompt}</option>
       {events.map((event) => (
-        <option key={event.eventNumber} value={event.eventNumber}>
-          {event.eventNumber} · {event.baseName}
+        <option key={event.eventId} value={event.eventId}>
+          {event.eventNumber} · {event.name}
         </option>
       ))}
     </>
   );
 }
 
-function CoupleEditor({ couple, matches, events }: CoupleEditorProps) {
+function CoupleEditor({ couple, eventIds, events }: CoupleEditorProps) {
   const { store, view } = useApp();
   const { actions, competition } = store;
   // Local drafts so a change arriving from another phone doesn't overwrite what's being typed.
@@ -98,14 +98,14 @@ function CoupleEditor({ couple, matches, events }: CoupleEditorProps) {
   useEffect(() => setFollow(couple.follow), [couple.follow]);
   const [eventToAdd, setEventToAdd] = useState('');
   const [isConfirmingDelete, setConfirmingDelete] = useState(false);
-  const unmatched = matches.filter((match) => match.eventNumber === null).length;
+  const missing = eventIds.filter((eventId) => !competition.value.events.has(eventId)).length;
 
   return (
     <details class={styles.couple}>
       <summary>
         <span>{coupleName(couple)}</span>
-        <span class={cx(unmatched ? 'bad' : 'muted', styles.count)}>
-          {unmatched ? `${unmatched} unmatched` : `${matches.length} events`}
+        <span class={cx(missing ? 'bad' : 'muted', styles.count)}>
+          {missing ? `${missing} not on schedule` : `${eventIds.length} events`}
         </span>
       </summary>
       <div class="row nowrap">
@@ -131,37 +131,24 @@ function CoupleEditor({ couple, matches, events }: CoupleEditorProps) {
           Save
         </button>
       </div>
-      {matches.map((match, index) => (
-        <div class={styles.entry} key={`${index}:${match.entry}`}>
-          <span>
-            {match.entry}
-            <br />
-            {match.eventNumber !== null ? (
-              <span class={cx('ok', styles.matched)}>
-                Heat {match.eventNumber}:{' '}
-                {competition.value.events.get(match.eventNumber)?.baseName}
-              </span>
-            ) : (
-              <select
-                aria-label={`Pick event for ${match.entry}`}
-                onChange={(event) => {
-                  const eventNumber = Number(event.currentTarget.value);
-                  if (eventNumber) actions.chooseEventForEntry(couple.id, index, eventNumber);
-                }}
-              >
-                <EventOptions events={events} prompt="Pick the event…" />
-              </select>
-            )}
-          </span>
-          <button
-            class="btn small ghost danger"
-            aria-label={`Remove ${match.entry}`}
-            onClick={() => actions.removeEntry(couple.id, index)}
-          >
-            Remove
-          </button>
-        </div>
-      ))}
+      {eventIds.map((eventId) => {
+        const event = competition.value.events.get(eventId);
+        const label = event
+          ? `${event.eventNumber} · ${event.name}`
+          : 'Event no longer on the schedule';
+        return (
+          <div class={styles.entry} key={eventId}>
+            <span class={event ? undefined : 'bad'}>{label}</span>
+            <button
+              class="btn small ghost danger"
+              aria-label={`Remove ${event?.name ?? 'missing event'}`}
+              onClick={() => actions.removeEntry(couple.id, eventId)}
+            >
+              Remove
+            </button>
+          </div>
+        );
+      })}
       <div class="row nowrap">
         <select
           aria-label="Add event"
@@ -174,7 +161,7 @@ function CoupleEditor({ couple, matches, events }: CoupleEditorProps) {
           class="btn small"
           onClick={() => {
             if (!eventToAdd) return;
-            actions.addEntry(couple.id, Number(eventToAdd));
+            actions.addEntry(couple.id, eventToAdd);
             setEventToAdd('');
           }}
         >

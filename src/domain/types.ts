@@ -1,16 +1,72 @@
-/** Core competition data. Everything here is plain, serializable data. */
+/** Core team and competition data. Everything here is plain, serializable data. */
 
 export type DanceStyle = 'smooth' | 'standard' | 'rhythm' | 'latin' | 'other';
 
 /** Round of an event, from first round (1) to final (5). Single-round events count as finals. */
 export type Round = 1 | 2 | 3 | 4 | 5;
 
-/** A heat of a numbered event, e.g. `9:39 AM [4] Newcomer Amer. Waltz 1st Round`. */
+// ---- The team: carries over from one competition to the next ----
+
+export interface Dancer {
+  id: string;
+  /** As written on the partnerships sheet; may carry a note, e.g. `Liam (TBA)`. */
+  name: string;
+  active: boolean;
+}
+
+export interface Partnership {
+  id: string;
+  leadId: string | null;
+  /** Null while the partner is to be announced. */
+  followId: string | null;
+  active: boolean;
+}
+
+/** A partnership with its dancers' names, as the competition views use it. */
+export interface Couple {
+  /** The partnership's id. */
+  id: string;
+  lead: string;
+  follow: string;
+}
+
+// ---- A competition ----
+
+export type CompetitionStatus = 'setup' | 'active' | 'archived';
+
+export interface CompetitionInfo {
+  id: string;
+  name: string;
+  /** Local date, `YYYY-MM-DD`. */
+  date: string;
+  status: CompetitionStatus;
+}
+
+/**
+ * One event on a competition's schedule, however many rounds it has. `eventId` stays the same
+ * when an updated schedule is pasted, even if the event is renumbered.
+ */
+export interface EventDetails {
+  eventId: string;
+  eventNumber: number;
+  /** The event name without its round, e.g. `Bronze Amer. Smooth (WT)`. */
+  name: string;
+  /** Leading level word, lowercase (e.g. `bronze`), or empty if none was recognized. */
+  level: string;
+  style: DanceStyle;
+  /** Dance letters as written, e.g. `WT`. Empty when none are listed. */
+  dances: string;
+  /** Set once the captain has reviewed the details. */
+  confirmed: boolean;
+}
+
+/** A heat of an event, e.g. `9:39 AM [4] Newcomer Amer. Waltz 1st Round`. */
 export interface Heat {
   kind: 'heat';
   id: string;
   /** Posted time as written, e.g. `9:39 AM`. */
   scheduledTime: string;
+  eventId: string;
   eventNumber: number;
   name: string;
 }
@@ -25,20 +81,13 @@ export interface ScheduleBreak {
 
 export type ScheduleItem = Heat | ScheduleBreak;
 
-/** An entry the team pinned to an event by hand instead of the automatic match. */
-export interface ManualMatch {
-  entry: string;
-  eventNumber: number;
+export interface Schedule {
+  items: ScheduleItem[];
+  events: EventDetails[];
 }
 
-export interface Couple {
-  id: string;
-  lead: string;
-  follow: string;
-  /** Event names as written on the partnerships sheet, e.g. `Silver I. Standard (TF)`. */
-  entries: string[];
-  manualMatches: ManualMatch[];
-}
+/** The events each couple is entered in: couple (partnership) id → event ids. */
+export type Entries = Readonly<Record<string, readonly string[]>>;
 
 /** How far a couple has got in one event. */
 export interface CallbackMark {
@@ -48,14 +97,18 @@ export interface CallbackMark {
   eliminated: boolean;
 }
 
-/** Callback marks keyed by `callbackKey(coupleId, eventNumber)`. */
+/** Callback marks keyed by `callbackKey(coupleId, eventId)`. */
 export type CallbackMarks = Readonly<Record<string, CallbackMark>>;
 
-export interface LiveState {
+/** Where the floor is. */
+export interface FloorState {
   /** The schedule item on the floor, or null before the competition starts. */
   currentItemId: string | null;
   /** When the current item was put on the floor (epoch ms). Drives the pace estimate. */
   currentSetAt: number | null;
+}
+
+export interface LiveState extends FloorState {
   callbacks: CallbackMarks;
 }
 

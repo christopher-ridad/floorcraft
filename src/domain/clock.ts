@@ -30,3 +30,10 @@ export function startOfDay(timestamp: number): number {
   date.setHours(0, 0, 0, 0);
   return date.getTime();
 }
+
+/** The local calendar date of `timestamp`, as `YYYY-MM-DD`. */
+export function localDate(timestamp: number): string {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}

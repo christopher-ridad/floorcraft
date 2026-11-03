@@ -19,7 +19,9 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build",
     "emulators": "firebase emulators:start",
-    "test:emulator": "firebase emulators:exec --only auth,firestore \"vitest run --config vitest.emulator.config.mts\""
+    "test:emulator": "firebase emulators:exec --only auth,firestore \"vitest run --config vitest.emulator.config.mts\"",
+    "build:emulator": "vite build --mode emulator",
+    "deploy:rules": "firebase deploy --only firestore:rules --project production"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

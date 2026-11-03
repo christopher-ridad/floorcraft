@@ -6,7 +6,7 @@ import { paceStatus } from '../domain/pace';
 import { AccessScreen } from './AccessScreens';
 import { HeatSheet } from './components/HeatSheet';
 import { AppContext, useApp } from './context';
-import { cx, noticeText, paceLabel } from './format';
+import { cx, noticeText, offlineLabel, paceLabel } from './format';
 import type { Tab, ViewState } from './viewState';
 import { NowView } from './views/NowView';
 import { PeopleView } from './views/PeopleView';
@@ -72,7 +72,13 @@ function TopBar() {
         <small>{store.activeCompetition.value?.name ?? store.team.value.team?.name ?? ''}</small>
       </div>
       <div class={styles.spacer} />
-      <span class={cx(styles.pace, pace.isOffSchedule && styles.offSchedule)}>{pace.text}</span>
+      {store.isOnline.value ? (
+        <span class={cx(styles.pace, pace.isOffSchedule && styles.offSchedule)}>{pace.text}</span>
+      ) : (
+        <span class={cx(styles.pace, styles.offSchedule)} role="status">
+          {offlineLabel(store.pendingWrites.value)}
+        </span>
+      )}
       <span
         class={cx(
           styles.sync,

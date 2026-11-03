@@ -10,6 +10,7 @@ import { connectFirebase } from './infra/firebase/firebaseApp';
 import { firebaseAuthService } from './infra/firebase/firebaseAuthService';
 import { firestoreAccessRepository } from './infra/firebase/firestoreAccessRepository';
 import { firestoreRepository } from './infra/firebase/firestoreRepository';
+import { browserConnectivity } from './infra/platform/browserConnectivity';
 import { preferencesStorage } from './infra/platform/preferencesStorage';
 import { screenWakeLock } from './infra/platform/screenWakeLock';
 import { webAlertOutput } from './infra/platform/webAlertOutput';
@@ -37,6 +38,7 @@ const store = createAppStore({
   clock: { now: () => Date.now() },
   alertOutput,
   wakeLock: screenWakeLock(),
+  connectivity: browserConnectivity(),
 });
 
 const joinCode = JOIN_LINK.exec(location.hash)?.[1];

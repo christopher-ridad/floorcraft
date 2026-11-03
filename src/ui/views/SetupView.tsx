@@ -6,7 +6,7 @@ import { parseSchedule } from '../../domain/schedule/parseSchedule';
 import { DancerPicker } from '../components/DancerPicker';
 import { useApp } from '../context';
 import { cx, plural } from '../format';
-import { AccountCard, TeamAccessCard } from './AccountCards';
+import { AccountCard, BackupCard, TeamAccessCard } from './AccountCards';
 import { CouplesEditor } from './CouplesEditor';
 import styles from './SetupView.module.css';
 
@@ -37,6 +37,8 @@ function CaptainSetup() {
       <ScheduleImport />
       <h2>Partnerships</h2>
       <PartnershipsImport />
+      <h2>Backup</h2>
+      <BackupCard />
       <h2>Reset</h2>
       <ResetLiveTracking />
     </>

@@ -17,6 +17,7 @@ import {
   type AlertOutput,
   type Clock,
   type CompetitionSnapshot,
+  type Connectivity,
   type HeatSheetRepository,
   type PreferencesStore,
   type ScreenWakeLock,
@@ -45,6 +46,8 @@ export interface AppDependencies {
   clock: Clock;
   alertOutput: AlertOutput;
   wakeLock: ScreenWakeLock;
+  /** Defaults to always online. */
+  connectivity?: Connectivity;
   createId?: IdFactory;
 }
 
@@ -66,6 +69,9 @@ export interface AppStore {
   syncMode: ReadonlySignal<SyncMode>;
   /** Why the team's data can't be read or written, if it can't. */
   syncError: ReadonlySignal<SyncErrorCode | null>;
+  isOnline: ReadonlySignal<boolean>;
+  /** Changes made on this phone that the server hasn't confirmed yet (e.g. while offline). */
+  pendingWrites: ReadonlySignal<number>;
   preferences: ReadonlySignal<Preferences>;
   /** Everything derived for the active competition. Recomputed only when its inputs change. */
   competition: ReadonlySignal<Competition>;
@@ -86,6 +92,9 @@ export function createAppStore(deps: AppDependencies): AppStore {
   const syncError = signal<SyncErrorCode | null>(null);
   const preferences = signal<Preferences>(deps.preferences.load());
   const notices = new NoticeChannel();
+  const connectivity = deps.connectivity ?? { isOnline: () => true, onChange: () => () => {} };
+  const isOnline = signal(connectivity.isOnline());
+  const pendingWrites = signal(0);
 
   const activeCompetitionId = computed(() => team.value.team?.activeCompetitionId ?? null);
   const activeCompetition = computed(
@@ -104,18 +113,25 @@ export function createAppStore(deps: AppDependencies): AppStore {
       couples: couples.value,
       entries: competitionData.value.entries,
       live: live.value,
+      date: activeCompetition.value?.date,
     }),
   );
 
-  /** Reports a failed save. The change itself shows (or not) through the watchers. */
+  /**
+   * Tracks a write until the server confirms it, and reports it if it fails. The change itself
+   * shows (or not) through the watchers.
+   */
   function save(write: Promise<void>) {
-    write.catch((error: unknown) => {
-      notices.publish({
-        kind: 'save-failed',
-        code: error instanceof SyncFailure ? error.code : 'network',
-        detail: error instanceof Error ? error.message : String(error),
-      });
-    });
+    pendingWrites.value++;
+    write
+      .catch((error: unknown) => {
+        notices.publish({
+          kind: 'save-failed',
+          code: error instanceof SyncFailure ? error.code : 'network',
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      })
+      .finally(() => pendingWrites.value--);
   }
 
   let alertWatcher: AlertWatcher | null = null;
@@ -190,6 +206,8 @@ export function createAppStore(deps: AppDependencies): AppStore {
     loaded,
     syncMode,
     syncError,
+    isOnline,
+    pendingWrites,
     preferences,
     competition,
     actions,
@@ -199,6 +217,7 @@ export function createAppStore(deps: AppDependencies): AppStore {
       if (stops.length) return;
       alertWatcher = watchAlerts({ competition, preferences, output: deps.alertOutput, notices });
       stops.push(
+        connectivity.onChange((online) => (isOnline.value = online)),
         () => alertWatcher?.dispose(),
         watchWakeLock(),
         watchTeam(),

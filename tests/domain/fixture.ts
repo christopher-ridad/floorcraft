@@ -83,6 +83,7 @@ export interface Setup {
   currentSetAt?: number;
   callbacks?: CallbackMarks;
   entries?: Entries;
+  date?: string;
 }
 
 export function competitionWith(setup: Setup = {}): Competition {
@@ -91,6 +92,7 @@ export function competitionWith(setup: Setup = {}): Competition {
     events,
     couples,
     entries: setup.entries ?? entries,
+    date: setup.date,
     live: {
       currentItemId: setup.currentItemId ?? null,
       currentSetAt: setup.currentSetAt ?? null,

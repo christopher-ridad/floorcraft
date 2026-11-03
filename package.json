@@ -21,7 +21,8 @@
     "emulators": "firebase emulators:start",
     "test:emulator": "firebase emulators:exec --only auth,firestore \"vitest run --config vitest.emulator.config.mts\"",
     "build:emulator": "vite build --mode emulator",
-    "deploy:rules": "firebase deploy --only firestore:rules --project production"
+    "deploy:rules": "firebase deploy --only firestore:rules --project production",
+    "convert:legacy": "tsx scripts/convertLegacyArtifact.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -36,6 +37,7 @@
     "firebase-tools": "^15.34.2",
     "jsdom": "^29.1.1",
     "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5",

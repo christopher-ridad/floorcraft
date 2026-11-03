@@ -1,9 +1,12 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
+import { readBackup } from '../../src/app/backup';
 import type { Notice } from '../../src/app/notices';
 import { SyncFailure } from '../../src/app/ports';
 import type { Preferences } from '../../src/app/preferences';
 import { createAppStore, type AppStore } from '../../src/app/store';
 import type { CallbackMarks, FloorState } from '../../src/domain/types';
+import { backupFromLegacy } from '../../src/infra/legacy/legacyBackup';
 import { at } from '../domain/fixture';
 import {
   COMPETITION_ID,
@@ -105,6 +108,34 @@ describe('loading', () => {
     const { store, backend } = start();
     backend.failReadsWith('unavailable');
     expect(store.syncError.value).toBe('unavailable');
+  });
+});
+
+describe('connection', () => {
+  it('counts this phone’s changes until the server confirms them', async () => {
+    const { store } = start();
+    store.actions.putOnFloor('h2');
+    store.actions.putOnFloor('h3');
+    expect(store.pendingWrites.value).toBe(2);
+    await settle();
+    expect(store.pendingWrites.value).toBe(0);
+  });
+
+  it('follows the phone going offline and back online', () => {
+    let listener: (online: boolean) => void = () => {};
+    const unstarted = createAppStore({
+      repository: fakeRepository().repository,
+      preferences: fakePreferences().store,
+      clock: { now: () => 0 },
+      alertOutput: fakeAlertOutput().output,
+      wakeLock: fakeWakeLock(true).wakeLock,
+      connectivity: { isOnline: () => false, onChange: (next) => ((listener = next), () => {}) },
+    });
+    store = unstarted;
+    unstarted.start();
+    expect(unstarted.isOnline.value).toBe(false);
+    listener(true);
+    expect(unstarted.isOnline.value).toBe(true);
   });
 });
 
@@ -322,6 +353,80 @@ describe('couple and entry actions', () => {
     store.actions.removeEntry('c4', 'gone');
     expect(store.competition.value.entries['c4']).toEqual(['e3']);
     expect(store.competition.value.missingEntries).toEqual([]);
+  });
+});
+
+describe('backups', () => {
+  const migratedPurdue = () => {
+    const legacy = (name: string): unknown =>
+      JSON.parse(
+        readFileSync(new URL(`../fixtures/legacy-artifact/${name}.json`, import.meta.url), 'utf8'),
+      );
+    let next = 0;
+    return backupFromLegacy(
+      { schedule: legacy('schedule'), entries: legacy('entries') },
+      { name: 'Purdue Ballroom Classic', date: '2026-11-14', status: 'active' },
+      () => `purdue${++next}`,
+    ).backup;
+  };
+
+  it('exports the team and the active competition as a valid backup', () => {
+    const { store } = start({
+      floor: onFloor('h3'),
+      callbacks: { c1_e1: { reachedRound: 4, eliminated: false } },
+    });
+    const backup = readBackup(JSON.parse(JSON.stringify(store.actions.exportBackup())));
+
+    expect(backup.team).toEqual({ name: 'Purdue', activeCompetitionId: COMPETITION_ID });
+    expect(backup.partnerships).toHaveLength(4);
+    expect(backup.competitions).toHaveLength(1);
+    expect(backup.competitions[0]).toMatchObject({
+      info: { id: COMPETITION_ID },
+      floor: onFloor('h3'),
+      callbacks: { c1_e1: { reachedRound: 4, eliminated: false } },
+    });
+  });
+
+  it('imports the migrated Purdue data and makes it the active competition', () => {
+    const { store } = start();
+    const purdue = migratedPurdue();
+    store.actions.importBackup(purdue);
+
+    expect(store.activeCompetition.value).toMatchObject({
+      name: 'Purdue Ballroom Classic',
+      date: '2026-11-14',
+      status: 'active',
+    });
+    expect(store.team.value.competitions.find((info) => info.id === COMPETITION_ID)?.status).toBe(
+      'archived',
+    );
+    expect(store.schedule.value).toHaveLength(147);
+    expect(store.couples.value.length).toBe(4 + 20);
+    expect(store.competition.value.missingEntries).toEqual([]);
+  });
+
+  it('restores the floor position and callbacks of the competition it makes active', () => {
+    const { store, backend } = start();
+    const backup = store.actions.exportBackup();
+    const competition = backup.competitions[0];
+    if (!competition) throw new Error('no competition');
+    store.actions.resetLiveTracking();
+    backend.writes.length = 0;
+
+    store.actions.importBackup({
+      ...backup,
+      competitions: [
+        {
+          ...competition,
+          floor: onFloor('h4'),
+          callbacks: { c3_e1: { reachedRound: 1, eliminated: true } },
+        },
+      ],
+    });
+    expect(store.live.value).toEqual({
+      ...onFloor('h4'),
+      callbacks: { c3_e1: { reachedRound: 1, eliminated: true } },
+    });
   });
 });
 

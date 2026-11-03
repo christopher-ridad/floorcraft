@@ -142,7 +142,18 @@ describe('pace and estimated times', () => {
     });
   });
 
-  it('ignores a delay of more than 10 hours (floor set on another day)', () => {
+  it('ignores a floor position set on a different day from the competition', () => {
+    const floor = { currentItemId: 'h3', currentSetAt: at(9, 5) };
+    expect(competitionWith({ ...floor, date: '2026-10-29' }).delayMinutes).toBe(10);
+    expect(competitionWith({ ...floor, date: '2026-11-14' }).delayMinutes).toBe(0);
+  });
+
+  it('counts long delays on the competition day', () => {
+    const floor = { currentItemId: 'h3', currentSetAt: at(19, 0) };
+    expect(competitionWith({ ...floor, date: '2026-10-29' }).delayMinutes).toBe(605);
+  });
+
+  it('without a date, ignores a delay of more than 10 hours', () => {
     expect(competitionWith({ currentItemId: 'h3', currentSetAt: at(19, 0) }).delayMinutes).toBe(0);
   });
 });
@@ -212,6 +223,31 @@ describe('callbacks waiting to be entered', () => {
     expect(pending(competition)).toEqual([
       ['c3', 'e1', 'h1', 'h3', 1, 4],
       ['c1', 'e1', 'h3', 'h5', 4, 5],
+    ]);
+  });
+});
+
+describe('overdue callbacks', () => {
+  const overdue = (competition: Competition) =>
+    pendingCallbacks(competition).map((p) => [p.couple.id, p.nextHeat.id, p.isOverdue]);
+
+  it('are not overdue while the next round is still to come', () => {
+    expect(overdue(competitionWith({ currentItemId: 'h2', currentSetAt: at(8, 50) }))).toEqual([
+      ['c1', 'h3', false],
+      ['c3', 'h3', false],
+    ]);
+  });
+
+  it('become overdue once the next round is on the floor, and come first', () => {
+    expect(overdue(competitionWith({ currentItemId: 'h5', currentSetAt: at(9, 5) }))).toEqual([
+      ['c1', 'h3', true],
+      ['c3', 'h3', true],
+      ['c2', 'h6', false],
+    ]);
+    expect(overdue(competitionWith({ currentItemId: 'h6', currentSetAt: at(9, 10) }))).toEqual([
+      ['c1', 'h3', true],
+      ['c3', 'h3', true],
+      ['c2', 'h6', true],
     ]);
   });
 });

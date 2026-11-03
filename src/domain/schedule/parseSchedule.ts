@@ -8,7 +8,6 @@ const BEFORE_EACH_TIME = /(?=\b\d{1,2}:\d{2}\s*[AP]\.?M\b)/i;
 const PAGE_FOOTER = /\s+\d+(st|nd|rd|th)\s+Annual.*$/i;
 const HEAT_LINE = /^(\d{1,2}:\d{2}\s*[AP]\.?M\.?)\s+\[(\d+)\]\s+(.+)$/i;
 const TIMED_LINE = /^(\d{1,2}:\d{2}\s*[AP]\.?M\.?)\s+(.+)$/i;
-const NEXT_DAY = /sunday/i;
 
 const normalizeTime = (time: string) => time.toUpperCase().replace(/\s+/g, ' ');
 
@@ -67,17 +66,12 @@ function parseScheduleLines(text: string, createId: IdFactory): ScheduleLine[] {
 
 /**
  * Text copied from a two-column PDF comes out interleaved. If times ever go backwards, sort by
- * time. Next-day section lines stay at the end.
+ * time. Competitions are one day, so time order is schedule order.
  */
 function restoreTimeOrder(items: ScheduleLine[]): ScheduleLine[] {
-  const isNextDay = (item: ScheduleLine) => item.kind === 'break' && NEXT_DAY.test(item.label);
-  const sameDay = items.filter((item) => !isNextDay(item));
-  const nextDay = items.filter(isNextDay);
   const minutes = (item: ScheduleLine) => parseClockTime(item.scheduledTime) ?? 0;
-
-  const isOutOfOrder = sameDay.some(
-    (item, i) => i > 0 && minutes(item) < minutes(sameDay[i - 1] as ScheduleLine),
+  const isOutOfOrder = items.some(
+    (item, i) => i > 0 && minutes(item) < minutes(items[i - 1] as ScheduleLine),
   );
-  if (isOutOfOrder) sameDay.sort((a, b) => minutes(a) - minutes(b));
-  return sameDay.concat(nextDay);
+  return isOutOfOrder ? [...items].sort((a, b) => minutes(a) - minutes(b)) : items;
 }

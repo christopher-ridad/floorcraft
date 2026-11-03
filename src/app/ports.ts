@@ -149,6 +149,13 @@ export interface Clock {
   now(): number;
 }
 
+/** Whether the phone has a network connection. */
+export interface Connectivity {
+  isOnline(): boolean;
+  /** Calls `listener` whenever the connection comes or goes. Returns unsubscribe. */
+  onChange(listener: (isOnline: boolean) => void): () => void;
+}
+
 /** Sound and vibration for alerts. Implementations fail silently where unsupported. */
 export interface AlertOutput {
   chime(times: number): void;

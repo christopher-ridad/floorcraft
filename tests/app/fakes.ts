@@ -57,7 +57,8 @@ export function fixtureBackup({
     partnerships: fixturePartnerships,
     competitions: [
       {
-        info: { id: COMPETITION_ID, name: 'Classic', date: '2026-11-14', status: 'active' },
+        // The same day as the fixture's clock times (`at`).
+        info: { id: COMPETITION_ID, name: 'Classic', date: '2026-10-29', status: 'active' },
         schedule: { items: schedule, events },
         entries: teamEntries,
         floor,
@@ -93,7 +94,8 @@ export function fakeRepository(seed: TeamBackup = fixtureBackup()) {
   const otherPhone = localRepository(memoryStorage(), { seed });
   const writes: [WriteMethod, ...unknown[]][] = [];
   const readErrorListeners = new Set<(code: SyncErrorCode) => void>();
-  const control = { failWith: null as SyncFailure | null };
+  const control = { failWith: null as SyncFailure | null, held: null as Promise<void> | null };
+  let release = () => {};
 
   const repository = {
     isShared: true,
@@ -117,6 +119,8 @@ export function fakeRepository(seed: TeamBackup = fixtureBackup()) {
   for (const method of WRITE_METHODS) {
     (repository as unknown as Record<string, unknown>)[method] = async (...args: unknown[]) => {
       if (control.failWith) throw control.failWith;
+      // Like a server that hasn't answered yet: the change shows, the write isn't confirmed.
+      if (control.held) await control.held;
       writes.push([method, ...args]);
       await (otherPhone[method] as (...a: unknown[]) => Promise<void>)(...args);
     };
@@ -131,6 +135,14 @@ export function fakeRepository(seed: TeamBackup = fixtureBackup()) {
     },
     failReadsWith: (code: SyncErrorCode) =>
       readErrorListeners.forEach((listener) => listener(code)),
+    /** Holds this phone's writes unconfirmed until `releaseWrites`. */
+    holdWrites() {
+      control.held = new Promise((resolve) => (release = resolve));
+    },
+    releaseWrites() {
+      control.held = null;
+      release();
+    },
   };
 }
 

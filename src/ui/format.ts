@@ -30,6 +30,10 @@ export function paceLabel(pace: PaceStatus): { text: string; isOffSchedule: bool
   }
 }
 
+/** Shown while the phone is offline; changes made meanwhile sync when it reconnects. */
+export const offlineLabel = (pendingWrites: number) =>
+  pendingWrites ? `Offline · ${plural(pendingWrites, 'change')} waiting` : 'Offline';
+
 export function noticeText(notice: Notice): string {
   switch (notice.kind) {
     case 'alert':

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, render, screen, within } from '@testing-library/preact';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -7,6 +9,7 @@ import type { Preferences } from '../../src/app/preferences';
 import { createSession } from '../../src/app/session';
 import { createAppStore } from '../../src/app/store';
 import type { FloorState } from '../../src/domain/types';
+import { backupFromLegacy } from '../../src/infra/legacy/legacyBackup';
 import { memoryStorage } from '../../src/infra/storage/keyValueStorage';
 import { App } from '../../src/ui/App';
 import { createViewState, type Tab } from '../../src/ui/viewState';
@@ -44,6 +47,7 @@ interface Options {
   signedIn?: AuthUser | null;
   joinCode?: string | null;
   access?: ReturnType<typeof fakeAccess>;
+  isOnline?: boolean;
 }
 
 async function renderApp({
@@ -53,6 +57,7 @@ async function renderApp({
   signedIn = captain,
   joinCode = null,
   access = fakeAccess({ captainUids: ['captain'] }),
+  isOnline = true,
 }: Options = {}) {
   const backend = fakeRepository(fixtureBackup({ floor }));
   const store = createAppStore({
@@ -61,6 +66,7 @@ async function renderApp({
     clock: { now: () => at(9, 20) },
     alertOutput: fakeAlertOutput().output,
     wakeLock: fakeWakeLock(true).wakeLock,
+    connectivity: { isOnline: () => isOnline, onChange: () => () => {} },
     createId: (() => {
       let next = 0;
       return () => `new${++next}`;
@@ -114,6 +120,14 @@ describe('Now tab', () => {
     expect(screen.getByRole('status').textContent).toBe("You're on deck. Next heat is yours.");
   });
 
+  it('does not say you are on the floor for a heat you only dance if called back', async () => {
+    // Jo's semi-final (h3) is on the floor, but Jo hasn't been marked as called back.
+    await renderApp({ preferences: { dancer: 'Jo' }, floor: onTheFloor('h3') });
+    expect(await screen.findByText('Jo, waiting on a callback')).toBeTruthy();
+    expect(screen.getByText(/On the floor now, if you were called back/)).toBeTruthy();
+    expect(screen.queryByText('Jo, you are')).toBeNull();
+  });
+
   it('says when you are waiting on a callback', async () => {
     await renderApp({ preferences: { dancer: 'Jo' }, floor: onTheFloor('h2') });
     expect(await screen.findByText('Jo, waiting on a callback')).toBeTruthy();
@@ -135,6 +149,24 @@ describe('Now tab', () => {
       c3_e1: { reachedRound: 1, eliminated: true },
     });
     expect(await screen.findByText('Callbacks to enter · 1')).toBeTruthy();
+  });
+
+  it('flags callbacks still not entered once the next round has started', async () => {
+    await renderApp({ floor: onTheFloor('h5') });
+    expect(await screen.findByText('Callbacks to enter · 3')).toBeTruthy();
+    expect(screen.getAllByText('Overdue')).toHaveLength(2);
+    expect(screen.getAllByText(/The Semi has started. Were they called back?/)).toHaveLength(2);
+  });
+
+  it('shows when the phone is offline, with changes waiting to sync', async () => {
+    const { store, backend } = await renderApp({ isOnline: false });
+    expect(screen.getByText('Offline')).toBeTruthy();
+
+    backend.holdWrites();
+    store.actions.advanceFloor();
+    expect(await screen.findByText('Offline · 1 change waiting')).toBeTruthy();
+    backend.releaseWrites();
+    expect(await screen.findByText('Offline')).toBeTruthy();
   });
 
   it('moves the floor with Next and Back, showing the pace', async () => {
@@ -358,5 +390,39 @@ describe('Setup for members and captains', () => {
 
     expect(await screen.findByRole('button', { name: 'Change' })).toBeTruthy();
     expect(session.membership.value?.dancerId).toBe('jo');
+  });
+});
+
+describe('backups', () => {
+  const backupFile = (contents: unknown) =>
+    new File([JSON.stringify(contents)], 'backup.json', { type: 'application/json' });
+
+  it('restores the migrated Purdue data from a file', async () => {
+    const legacy = (name: string): unknown =>
+      JSON.parse(readFileSync(resolve('tests/fixtures/legacy-artifact', `${name}.json`), 'utf8'));
+    const { backup } = backupFromLegacy(
+      { schedule: legacy('schedule'), entries: legacy('entries') },
+      { name: 'Purdue Ballroom Classic', date: '2026-11-14', status: 'active' },
+      () => crypto.randomUUID(),
+    );
+    const { user, store } = await renderApp({ tab: 'setup' });
+
+    await user.upload(screen.getByLabelText('Restore from a backup'), backupFile(backup));
+    expect(await screen.findByText(/makes/, { exact: false })).toBeTruthy();
+    expect(screen.getByText('Purdue Ballroom Classic', { selector: 'b' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Restore' }));
+
+    expect(store.activeCompetition.value?.name).toBe('Purdue Ballroom Classic');
+    expect(store.schedule.value).toHaveLength(147);
+    expect(screen.getByRole('status').textContent).toBe('Backup restored.');
+  });
+
+  it('refuses a file that isn’t a backup', async () => {
+    const { user, store } = await renderApp({ tab: 'setup' });
+    await user.upload(screen.getByLabelText('Restore from a backup'), backupFile({ hello: 1 }));
+
+    expect(await screen.findByText('This is not a team backup file.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
+    expect(store.activeCompetition.value?.name).toBe('Classic');
   });
 });

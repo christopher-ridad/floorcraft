@@ -1,7 +1,8 @@
 import { useState } from 'preact/hooks';
+import { InvalidBackup, readBackup, type TeamBackup } from '../../app/backup';
 import { dancerName } from '../../domain/dancers';
 import { useApp } from '../context';
-import { cx, sessionProblemText } from '../format';
+import { cx, plural, sessionProblemText } from '../format';
 import styles from './SetupView.module.css';
 
 /** The team link for a join code, on whatever address this copy of the app is served from. */
@@ -132,6 +133,89 @@ export function TeamAccessCard() {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Downloading a backup of the team, and restoring one (how data moves into a new team). */
+export function BackupCard() {
+  const { store, view } = useApp();
+  const [pending, setPending] = useState<TeamBackup | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const download = () => {
+    const backup = store.actions.exportBackup();
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `heat-sheet-backup-${backup.exportedAt.slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const choose = async (file: File | undefined) => {
+    setProblem(null);
+    setPending(null);
+    if (!file) return;
+    try {
+      setPending(readBackup(JSON.parse(await file.text())));
+    } catch (error) {
+      setProblem(error instanceof InvalidBackup ? error.message : 'That file isn’t a backup.');
+    }
+  };
+
+  const active = pending?.competitions.find(
+    ({ info }) => info.id === pending.team.activeCompetitionId,
+  );
+
+  return (
+    <div class="card stack">
+      <div class="row">
+        <button class="btn small" onClick={download}>
+          Download a backup
+        </button>
+        <span class={cx('muted', styles.note)}>The team and this competition, as one file.</span>
+      </div>
+      <label class="field" for="backupFile">
+        Restore from a backup
+        <input
+          id="backupFile"
+          type="file"
+          accept="application/json,.json"
+          onChange={(event) => void choose(event.currentTarget.files?.[0])}
+        />
+      </label>
+      {problem && <div class="banner">{problem}</div>}
+      {pending && (
+        <div class="stack">
+          <span>
+            Adds {plural(pending.dancers.length, 'dancer')},{' '}
+            {plural(pending.partnerships.length, 'partnership')} and{' '}
+            {plural(pending.competitions.length, 'competition')}
+            {active && (
+              <>
+                , and makes <b>{active.info.name}</b> the competition everyone sees
+              </>
+            )}
+            . Anything with the same id is replaced.
+          </span>
+          <div class="row">
+            <button
+              class="btn small primary"
+              onClick={() => {
+                store.actions.importBackup(pending);
+                setPending(null);
+                view.showToast('Backup restored.');
+              }}
+            >
+              Restore
+            </button>
+            <button class="btn small" onClick={() => setPending(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

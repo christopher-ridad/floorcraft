@@ -1,12 +1,15 @@
 import { callbackKey, callbackStatus } from './callbacks';
-import { minutesSinceMidnight, parseClockTime } from './clock';
+import { localDate, minutesSinceMidnight, parseClockTime } from './clock';
 import { dancerName } from './dancers';
 import { roundsByEvent, type RoundsByEvent } from './rounds';
 import { buildEventCatalog, type EventCatalog } from './schedule/eventCatalog';
 import { parseHeatName, type HeatName } from './schedule/heatName';
 import type { Couple, Entries, EventDetails, LiveState, Round, ScheduleItem } from './types';
 
-/** A delay this large means the floor was set on another day, so it is ignored. */
+/**
+ * Without the competition's date, a delay this large means the floor was set on another day, so
+ * it is ignored.
+ */
 const MAX_PLAUSIBLE_DELAY_MINUTES = 600;
 
 export interface CompetitionState {
@@ -15,6 +18,8 @@ export interface CompetitionState {
   couples: readonly Couple[];
   entries: Entries;
   live: LiveState;
+  /** The competition's date, `YYYY-MM-DD`. A floor position set on another day is ignored. */
+  date?: string;
 }
 
 /** An entry for an event that is no longer on the schedule. */
@@ -90,7 +95,7 @@ export function deriveCompetition(state: CompetitionState): Competition {
     : -1;
   const current = schedule[currentIndex];
   const delayMinutes = current
-    ? computeDelay(items.get(current.id)?.scheduledMinutes ?? null, live.currentSetAt)
+    ? computeDelay(items.get(current.id)?.scheduledMinutes ?? null, live.currentSetAt, state.date)
     : 0;
 
   return {
@@ -135,10 +140,17 @@ function describeItems(schedule: readonly ScheduleItem[]): Map<string, ItemInfo>
   return items;
 }
 
-function computeDelay(scheduledMinutes: number | null, setAt: number | null): number {
+/** How late (positive) or early the floor is, from when the current item went on the floor. */
+function computeDelay(
+  scheduledMinutes: number | null,
+  setAt: number | null,
+  date: string | undefined,
+): number {
   if (scheduledMinutes === null || !setAt) return 0;
+  // Set on a different day (e.g. someone tried the app the night before): not today's pace.
+  if (date && localDate(setAt) !== date) return 0;
   const delay = minutesSinceMidnight(new Date(setAt)) - scheduledMinutes;
-  return Math.abs(delay) > MAX_PLAUSIBLE_DELAY_MINUTES ? 0 : delay;
+  return !date && Math.abs(delay) > MAX_PLAUSIBLE_DELAY_MINUTES ? 0 : delay;
 }
 
 function summarizeDancers(

@@ -62,11 +62,14 @@ export interface PendingCallback {
   nextHeat: Heat;
   reachedRound: Round;
   nextRound: Round;
+  /** The next round is on the floor or already over, and nobody entered the result. */
+  isOverdue: boolean;
 }
 
 /**
  * Callbacks to enter: for each couple still in an event, once the heat of their latest round
- * is behind the floor and the event has a later round. Ordered by when that later round is.
+ * is behind the floor and the event has a later round. Overdue ones (the later round has
+ * started) come first; then they're ordered by when that later round is.
  */
 export function pendingCallbacks(competition: Competition): PendingCallback[] {
   const { schedule, couples, live, rounds, coupleEvents, items, currentIndex } = competition;
@@ -96,9 +99,13 @@ export function pendingCallbacks(competition: Competition): PendingCallback[] {
         nextHeat,
         reachedRound: reached,
         nextRound: next,
+        isOverdue: (items.get(nextHeat.id)?.index ?? Infinity) <= currentIndex,
       });
     }
   }
   const indexOf = (heat: Heat) => items.get(heat.id)?.index ?? Infinity;
-  return pending.sort((a, b) => indexOf(a.nextHeat) - indexOf(b.nextHeat));
+  return pending.sort(
+    (a, b) =>
+      Number(b.isOverdue) - Number(a.isOverdue) || indexOf(a.nextHeat) - indexOf(b.nextHeat),
+  );
 }

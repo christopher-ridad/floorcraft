@@ -12,7 +12,14 @@ import {
 import { parseSchedule } from '../domain/schedule/parseSchedule';
 import { createDancerDirectory, importPartnerships, type UnmatchedEntry } from '../domain/team';
 import type { CompetitionInfo, IdFactory, LiveState, Partnership } from '../domain/types';
-import type { Clock, CompetitionSnapshot, HeatSheetRepository, TeamSnapshot } from './ports';
+import { BACKUP_FORMAT, BACKUP_VERSION, type TeamBackup } from './backup';
+import type {
+  Clock,
+  CompetitionSnapshot,
+  HeatSheetRepository,
+  TeamInfo,
+  TeamSnapshot,
+} from './ports';
 import type { Preferences } from './preferences';
 
 /** `[12] Silver Amer. Smooth Final` is a heat; any other text is a break label. */
@@ -110,6 +117,60 @@ export function createActions(ctx: ActionContext) {
       save(repository.saveCompetition({ id, name: name.trim(), date, status: 'active' }));
       save(repository.updateTeam({ activeCompetitionId: id }));
       return id;
+    },
+
+    // ---- Backups ----
+
+    /**
+     * The team and the active competition as one file. (Only the active competition's schedule
+     * and entries are loaded on the phone, so earlier competitions aren't included.)
+     */
+    exportBackup(): TeamBackup {
+      const { team, dancers, partnerships } = ctx.team.peek();
+      const active = ctx.activeCompetition.peek();
+      const { schedule, entries, floor, callbacks } = ctx.competitionData.peek();
+      return {
+        format: BACKUP_FORMAT,
+        version: BACKUP_VERSION,
+        exportedAt: new Date(clock.now()).toISOString(),
+        team: { name: team?.name ?? '', activeCompetitionId: active?.id ?? null },
+        dancers,
+        partnerships,
+        competitions: active ? [{ info: active, schedule, entries, floor, callbacks }] : [],
+      };
+    },
+
+    /**
+     * Adds everything in a backup to the team: dancers, partnerships and competitions are added or
+     * replaced by id. The backup's active competition becomes the one everyone sees, and the
+     * previously active one is archived.
+     */
+    importBackup(backup: TeamBackup) {
+      save(repository.saveDancers(backup.dancers));
+      save(repository.savePartnerships(backup.partnerships));
+      for (const { info, schedule, entries } of backup.competitions) {
+        save(repository.saveCompetition(info));
+        save(repository.saveSchedule(info.id, schedule));
+        save(repository.saveEntries(info.id, entries));
+      }
+
+      const activeId = backup.team.activeCompetitionId;
+      const previous = ctx.activeCompetition.peek();
+      if (previous && activeId && previous.id !== activeId) {
+        save(repository.saveCompetition({ ...previous, status: 'archived' }));
+      }
+      const change: Partial<TeamInfo> = {};
+      if (backup.team.name) change.name = backup.team.name;
+      if (activeId) change.activeCompetitionId = activeId;
+      if (Object.keys(change).length) save(repository.updateTeam(change));
+
+      // Live tracking can only be written for the active competition, so only its is restored.
+      const active = backup.competitions.find(({ info }) => info.id === activeId);
+      if (!active) return;
+      if (active.floor.currentItemId) save(repository.saveFloor(active.info.id, active.floor));
+      for (const [key, mark] of Object.entries(active.callbacks)) {
+        save(repository.saveCallback(active.info.id, key, mark));
+      }
     },
 
     // ---- The floor ----

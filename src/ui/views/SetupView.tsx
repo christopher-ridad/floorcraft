@@ -4,6 +4,7 @@ import { ALERT_THRESHOLD_CHOICES, type Preferences } from '../../app/preferences
 import { parsePartnershipRows } from '../../domain/entries/parsePartnershipRows';
 import { parseSchedule } from '../../domain/schedule/parseSchedule';
 import { DancerPicker } from '../components/DancerPicker';
+import { InstallCard } from '../components/DeviceBanners';
 import { useApp } from '../context';
 import { cx, plural } from '../format';
 import { AccountCard, BackupCard, TeamAccessCard } from './AccountCards';
@@ -15,6 +16,7 @@ export function SetupView() {
   return (
     <>
       <h2>This phone</h2>
+      <InstallCard dismissible={false} />
       <PhoneSettings />
       <h2>Account</h2>
       <AccountCard />

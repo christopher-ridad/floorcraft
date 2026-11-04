@@ -1,14 +1,22 @@
 import { createContext } from 'preact';
 import { useContext, useEffect, useState } from 'preact/hooks';
 import { minutesSinceMidnight } from '../domain/clock';
+import type { AppUpdates, InstallSupport } from '../app/ports';
 import type { Session } from '../app/session';
 import type { AppStore } from '../app/store';
 import type { ViewState } from './viewState';
+
+/** What the phone itself can do: install the app, and pick up new versions. */
+export interface DeviceFeatures {
+  install: InstallSupport;
+  updates: AppUpdates;
+}
 
 export interface AppContextValue {
   store: AppStore;
   session: Session;
   view: ViewState;
+  device: DeviceFeatures;
 }
 
 export const AppContext = createContext<AppContextValue | null>(null);

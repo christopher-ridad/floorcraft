@@ -37,5 +37,18 @@ export default tseslint.config(
   ]),
   layerRule('src/infra/**/*.ts', ['**/ui/**', 'preact', 'preact/*', '@preact/*']),
   layerRule('src/ui/**/*.{ts,tsx}', ['**/infra/**']),
+  {
+    // The service worker runs in its own global scope.
+    files: ['public/sw.js'],
+    languageOptions: {
+      globals: {
+        self: 'readonly',
+        caches: 'readonly',
+        fetch: 'readonly',
+        URL: 'readonly',
+        Response: 'readonly',
+      },
+    },
+  },
   prettier,
 );

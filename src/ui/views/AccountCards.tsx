@@ -97,6 +97,9 @@ export function TeamAccessCard() {
         Send this link to the team. Opening it adds that phone to the team; they pick their name and
         can then move the floor and record callbacks.
       </span>
+      <span class={cx('muted', styles.note)}>
+        Team code (for joining from the installed app): <b class="mono">{code}</b>
+      </span>
       <input
         type="text"
         readOnly

@@ -177,6 +177,21 @@ export function createSession(deps: SessionDependencies) {
   }
 
   const actions = {
+    /**
+     * Joins with a team code (or a pasted team link), as opening the link would. Used where a
+     * link can't carry the code, e.g. after installing the app on an iPhone.
+     */
+    joinWithCode(codeOrLink: string) {
+      const code = /#join=(.+)$/.exec(codeOrLink.trim())?.[1] ?? codeOrLink.trim();
+      if (!code) return;
+      problem.value = null;
+      pendingJoinCode = decodeURIComponent(code);
+      joinState.value = 'joining';
+      const signedIn = user.peek();
+      if (signedIn) watchAccess(signedIn);
+      else auth.signInAnonymously().catch(() => (joinState.value = 'failed'));
+    },
+
     /** Captains sign in with Google. */
     signInAsCaptain: () => attempt(() => auth.signInWithGoogle()),
 

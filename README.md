@@ -66,6 +66,14 @@ The app reaches the data through the `HeatSheetRepository` interface in [src/app
 - **Teammates** open the team link the captain shares (**Setup → Team link**), then pick their name. No account needed; a teammate can optionally link a Google account to keep their spot on any device.
 - **Setup** shows only this phone's settings to teammates; captains also get the team link, the schedule, and couples. The rules in [firestore.rules](firestore.rules) enforce this on the server.
 
+## Installing on a phone
+
+Heat Sheet installs as an app from the browser: on Android, **Install app** (Chrome offers it, and the app shows a button); on iPhone, Safari's **Share → Add to Home Screen**. Installed, it opens full screen, starts offline from a saved copy, and on iPhone stays signed in between competitions.
+
+On iPhone, the Home Screen app has its own storage, separate from Safari. A team link opened in Safari therefore asks to install first, then join from the app with the **team code** (shown with the team link in Setup).
+
+New versions load automatically when online; an app left open during a release offers **Reload**.
+
 ## Backups and moving data in
 
 Captains can download a backup (the team and the active competition, as one JSON file) and restore one in **Setup → Backup**. Restoring adds or replaces everything by id and makes the backup's competition the one everyone sees.

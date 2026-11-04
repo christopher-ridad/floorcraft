@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { cleanup, render, screen, within } from '@testing-library/preact';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import type { AuthUser } from '../../src/app/ports';
+import type { AuthUser, InstallPlatform } from '../../src/app/ports';
 import type { Preferences } from '../../src/app/preferences';
 import { createSession } from '../../src/app/session';
 import { createAppStore } from '../../src/app/store';
@@ -39,8 +39,45 @@ const captain: AuthUser = {
   email: 'casey@example.com',
 };
 
+/** A phone for tests: how it can install the app, and a switch to announce an update. */
+function fakeDevice({
+  platform = 'other' as InstallPlatform,
+  isInstalled = false,
+  canPrompt = false,
+} = {}) {
+  let announceUpdate = () => {};
+  const calls: string[] = [];
+  return {
+    calls,
+    announceUpdate: () => announceUpdate(),
+    device: {
+      install: {
+        platform,
+        isInstalled,
+        onPromptAvailable: (listener: (isAvailable: boolean) => void) => {
+          listener(canPrompt);
+          return () => {};
+        },
+        promptInstall: async () => {
+          calls.push('promptInstall');
+          return true;
+        },
+      },
+      updates: {
+        onReady: (listener: () => void) => {
+          announceUpdate = listener;
+          return () => {};
+        },
+        apply: () => void calls.push('applyUpdate'),
+      },
+    },
+  };
+}
+
 interface Options {
   tab?: Tab;
+  device?: ReturnType<typeof fakeDevice>;
+  installFirstCode?: string;
   preferences?: Partial<Preferences>;
   floor?: FloorState;
   /** Who is signed in; by default the team's captain, who isn't dancing. */
@@ -58,6 +95,8 @@ async function renderApp({
   joinCode = null,
   access = fakeAccess({ captainUids: ['captain'] }),
   isOnline = true,
+  device = fakeDevice(),
+  installFirstCode,
 }: Options = {}) {
   const backend = fakeRepository(fixtureBackup({ floor }));
   const store = createAppStore({
@@ -82,7 +121,8 @@ async function renderApp({
     createJoinCode: () => 'fresh-code',
   });
   const view = createViewState(memoryStorage({ 'floorcraft:tab': tab }));
-  render(<App store={store} session={session} view={view} />);
+  if (installFirstCode) view.installFirstCode.value = installFirstCode;
+  render(<App store={store} session={session} view={view} device={device.device} />);
   session.start();
   await settle();
   return { store, session, backend, access, auth, user: userEvent.setup() };
@@ -424,5 +464,60 @@ describe('backups', () => {
     expect(await screen.findByText('This is not a team backup file.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
     expect(store.activeCompetition.value?.name).toBe('Classic');
+  });
+});
+
+describe('installing the app', () => {
+  it('shows iPhone users the Home Screen steps, until dismissed', async () => {
+    const { user } = await renderApp({ device: fakeDevice({ platform: 'ios' }) });
+    expect(screen.getByText('Install Heat Sheet')).toBeTruthy();
+    expect(screen.getByText(/Add to Home Screen/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(screen.queryByText('Install Heat Sheet')).toBeNull();
+  });
+
+  it('offers the browser’s install prompt on Android', async () => {
+    const device = fakeDevice({ platform: 'android', canPrompt: true });
+    const { user } = await renderApp({ device });
+    await user.click(await screen.findByRole('button', { name: 'Install app' }));
+    expect(device.calls).toEqual(['promptInstall']);
+  });
+
+  it('says nothing once installed, or where installing isn’t offered', async () => {
+    await renderApp({ device: fakeDevice({ platform: 'ios', isInstalled: true }) });
+    expect(screen.queryByText('Install Heat Sheet')).toBeNull();
+    cleanup();
+    await renderApp({ device: fakeDevice({ platform: 'android', canPrompt: false }) });
+    expect(screen.queryByText('Install Heat Sheet')).toBeNull();
+  });
+
+  it('asks iPhone Safari users with a team link to install first, showing the code', async () => {
+    const { user, session } = await renderApp({ signedIn: null, installFirstCode: 'team-code' });
+    expect(
+      screen.getByRole('heading', { name: 'First, add Heat Sheet to your Home Screen' }),
+    ).toBeTruthy();
+    expect(screen.getByText('team-code')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Join in Safari instead' }));
+    expect(await screen.findByRole('heading', { name: 'Who are you?' })).toBeTruthy();
+    expect(session.membership.value).not.toBeNull();
+  });
+
+  it('joins with a team code typed into the app', async () => {
+    const { user } = await renderApp({ signedIn: null });
+    await user.type(screen.getByLabelText('Team code'), 'team-code');
+    await user.click(screen.getByRole('button', { name: 'Join the team' }));
+    expect(await screen.findByRole('heading', { name: 'Who are you?' })).toBeTruthy();
+  });
+
+  it('offers to reload when a new version is ready', async () => {
+    const device = fakeDevice();
+    const { user } = await renderApp({ device });
+    expect(screen.queryByText('A new version is ready.')).toBeNull();
+
+    device.announceUpdate();
+    await user.click(await screen.findByRole('button', { name: 'Reload' }));
+    expect(device.calls).toEqual(['applyUpdate']);
   });
 });

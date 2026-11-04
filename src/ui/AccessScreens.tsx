@@ -1,16 +1,21 @@
 import type { ComponentChildren } from 'preact';
 import { useState } from 'preact/hooks';
 import { dancerName } from '../domain/dancers';
+import { IosInstallSteps } from './components/DeviceBanners';
 import { useApp } from './context';
 import { sessionProblemText } from './format';
 import styles from './AccessScreens.module.css';
 
 /** What a phone sees until it's in: signing in, joining, and picking a name. */
 export function AccessScreen() {
-  const { session } = useApp();
+  const { session, view } = useApp();
   switch (session.phase.value) {
     case 'signed-out':
-      return <Welcome />;
+      return view.installFirstCode.value ? (
+        <InstallFirst code={view.installFirstCode.value} />
+      ) : (
+        <Welcome />
+      );
     case 'join-failed':
       return <JoinFailed />;
     case 'not-member':
@@ -61,14 +66,78 @@ function CaptainSignIn({ label = 'Captain? Sign in with Google' }: { label?: str
   );
 }
 
+/** Joining by typing the team code (or pasting the team link). */
+function TeamCodeForm() {
+  const { session } = useApp();
+  const [code, setCode] = useState('');
+  return (
+    <form
+      class="stack"
+      onSubmit={(event) => {
+        event.preventDefault();
+        session.actions.joinWithCode(code);
+      }}
+    >
+      <label class="field" for="teamCode">
+        Team code
+        <input
+          id="teamCode"
+          type="text"
+          autoComplete="off"
+          autoCapitalize="none"
+          placeholder="e.g. k7mq-x2bn-p9ft, or paste the team link"
+          value={code}
+          onInput={(event) => setCode(event.currentTarget.value)}
+        />
+      </label>
+      <button class="btn primary" type="submit" disabled={!code.trim()}>
+        Join the team
+      </button>
+    </form>
+  );
+}
+
 function Welcome() {
   return (
     <Screen>
       <p class={styles.lead}>
-        To join your team, open the link your captain sent you. You'll pick your name, and the app
-        will tell you when you're up.
+        To join your team, open the link your captain sent you, or enter its team code. You'll pick
+        your name, and the app will tell you when you're up.
       </p>
+      <TeamCodeForm />
       <CaptainSignIn />
+    </Screen>
+  );
+}
+
+/**
+ * iPhone Safari opened with a team link. The Home Screen app keeps its own storage, so joining
+ * here wouldn't carry over: install first, then enter the code in the app.
+ */
+function InstallFirst({ code }: { code: string }) {
+  const { session, view } = useApp();
+  return (
+    <Screen>
+      <h2 class={styles.title}>First, add Heat Sheet to your Home Screen</h2>
+      <p class={styles.lead}>
+        The app keeps you signed in and can alert you on your lock screen. Then join from the app
+        with this team code:
+      </p>
+      <div class="card">
+        <span class="mono" style={{ fontSize: '20px' }}>
+          {code}
+        </span>
+      </div>
+      <IosInstallSteps />
+      <button
+        class="btn ghost"
+        onClick={() => {
+          view.installFirstCode.value = null;
+          session.actions.joinWithCode(code);
+        }}
+      >
+        Join in Safari instead
+      </button>
     </Screen>
   );
 }
@@ -77,7 +146,10 @@ function JoinFailed() {
   return (
     <Screen>
       <h2 class={styles.title}>That join link didn't work</h2>
-      <p class={styles.lead}>It may be an old link. Ask your captain for the current one.</p>
+      <p class={styles.lead}>
+        It may be an old link or code. Ask your captain for the current one.
+      </p>
+      <TeamCodeForm />
       <CaptainSignIn />
     </Screen>
   );

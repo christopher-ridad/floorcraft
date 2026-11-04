@@ -14,6 +14,7 @@ import { NoSchedule } from '../components/EmptyState';
 import { HeatRow } from '../components/HeatRow';
 import { PossibleHeatsToggle } from '../components/PossibleHeats';
 import { DancerPicker } from '../components/DancerPicker';
+import { InstallCard } from '../components/DeviceBanners';
 import { useApp, useMinuteOfDay } from '../context';
 import { coupleName, cx, partnerName, roundLabel } from '../format';
 import styles from './NowView.module.css';
@@ -25,6 +26,7 @@ export function NowView() {
   if (!store.schedule.value.length) return <NoSchedule />;
   return (
     <>
+      <InstallCard />
       {store.preferences.value.dancer ? <MyNextHeat /> : <WhoAreYou />}
       <OnTheFloor />
       <CallbacksToEnter />

@@ -206,3 +206,24 @@ export interface AuthService {
   linkWithGoogle(): Promise<void>;
   signOut(): Promise<void>;
 }
+
+/** New versions of the app, for an installed app that may stay open across a release. */
+export interface AppUpdates {
+  /** Calls `listener` once a new version is ready to load. */
+  onReady(listener: () => void): () => void;
+  /** Switches to the new version (reloads the page). */
+  apply(): void;
+}
+
+export type InstallPlatform = 'ios' | 'android' | 'other';
+
+/** Installing the app on the phone's home screen. */
+export interface InstallSupport {
+  readonly platform: InstallPlatform;
+  /** True when running as the installed app rather than in a browser tab. */
+  readonly isInstalled: boolean;
+  /** Calls `listener` when the browser's own install prompt becomes available (or not). */
+  onPromptAvailable(listener: (isAvailable: boolean) => void): () => void;
+  /** Shows the browser's install prompt. Resolves true if the person installed. */
+  promptInstall(): Promise<boolean>;
+}

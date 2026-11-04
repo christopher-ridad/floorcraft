@@ -66,3 +66,29 @@ test('an old link is refused', async ({ page }) => {
   await page.goto('/#join=not-the-code');
   await expect(page.getByRole('heading', { name: "That join link didn't work" })).toBeVisible();
 });
+
+test('installs as an app and opens offline with the team’s data', async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await joinAs(page, 'Chris');
+
+  // Installable: the manifest and its icons are served.
+  const manifest = (await (await page.request.get('/manifest.webmanifest')).json()) as {
+    display: string;
+    icons: { src: string }[];
+  };
+  expect(manifest.display).toBe('standalone');
+  for (const icon of manifest.icons) {
+    expect((await page.request.get(`/${icon.src}`)).ok()).toBe(true);
+  }
+
+  // Once the service worker controls the page, the app opens with no connection at all.
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByText('Chris, your next heat')).toBeVisible();
+  await expect(page.getByText('Offline')).toBeVisible();
+  await context.close();
+});

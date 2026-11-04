@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full-bleed background so the icon also works when masked to a circle or squircle. -->
+  <rect width="512" height="512" fill="#5E2A9C"/>
+  <!-- A heat card: two lines of a heat sheet, the first "on the floor". -->
+  <rect x="112" y="150" width="288" height="212" rx="34" fill="#FFFFFF"/>
+  <circle cx="172" cy="214" r="22" fill="#E0B000"/>
+  <rect x="214" y="200" width="138" height="28" rx="14" fill="#5E2A9C"/>
+  <rect x="150" y="270" width="202" height="24" rx="12" fill="#D9CCEA"/>
+  <rect x="150" y="312" width="140" height="24" rx="12" fill="#D9CCEA"/>
+</svg>

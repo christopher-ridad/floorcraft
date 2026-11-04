@@ -34,6 +34,12 @@ export function createViewState(storage: ViewStorage) {
   /** The schedule item whose sheet is open. */
   const openItemId = signal<string | null>(null);
   const toast = signal<{ text: string; id: number } | null>(null);
+  /**
+   * A team code from a link opened in iPhone Safari. The installed app has separate storage, so
+   * the phone installs first and enters this code there.
+   */
+  const installFirstCode = signal<string | null>(null);
+  const isInstallCardDismissed = signal(storage.get('floorcraft:installDismissed') === 'true');
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   return {
@@ -42,7 +48,13 @@ export function createViewState(storage: ViewStorage) {
     viewingDancer,
     openItemId,
     toast,
+    installFirstCode,
+    isInstallCardDismissed,
 
+    dismissInstallCard() {
+      isInstallCardDismissed.value = true;
+      storage.set('floorcraft:installDismissed', 'true');
+    },
     showTab(next: Tab) {
       tab.value = next;
       storage.set('floorcraft:tab', next);

@@ -4,8 +4,9 @@ import type { Session } from '../app/session';
 import type { AppStore } from '../app/store';
 import { paceStatus } from '../domain/pace';
 import { AccessScreen } from './AccessScreens';
+import { UpdateBanner } from './components/DeviceBanners';
 import { HeatSheet } from './components/HeatSheet';
-import { AppContext, useApp } from './context';
+import { AppContext, useApp, type DeviceFeatures } from './context';
 import { cx, noticeText, offlineLabel, paceLabel } from './format';
 import type { Tab, ViewState } from './viewState';
 import { NowView } from './views/NowView';
@@ -25,15 +26,17 @@ interface AppProps {
   store: AppStore;
   session: Session;
   view: ViewState;
+  device: DeviceFeatures;
 }
 
-export function App({ store, session, view }: AppProps) {
+export function App({ store, session, view, device }: AppProps) {
   // Alerts, failed saves and other notices from the store show as toasts.
   useEffect(() => store.onNotice((notice) => view.showToast(noticeText(notice))), [store, view]);
 
   return (
-    <AppContext.Provider value={{ store, session, view }}>
+    <AppContext.Provider value={{ store, session, view, device }}>
       {session.phase.value === 'ready' ? <HeatSheetApp /> : <AccessScreen />}
+      <UpdateBanner />
       <Toast />
     </AppContext.Provider>
   );

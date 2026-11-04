@@ -104,6 +104,26 @@ describe('arriving', () => {
     expect(session.phase.value).toBe('choose-dancer');
   });
 
+  it('joins with a typed-in team code or a pasted link', async () => {
+    const { session, access } = start();
+    session.actions.joinWithCode('  team-code ');
+    await settle();
+    expect(access.state.members.has('phone-1')).toBe(true);
+    expect(session.phase.value).toBe('choose-dancer');
+
+    const second = start({ signedIn: anonymousPhone('pasted') });
+    second.session.actions.joinWithCode('https://example.com/floorcraft/#join=team-code');
+    await settle();
+    expect(second.access.state.members.has('pasted')).toBe(true);
+  });
+
+  it('says so when a typed-in code is wrong', async () => {
+    const { session } = start();
+    session.actions.joinWithCode('nope');
+    await settle();
+    expect(session.phase.value).toBe('join-failed');
+  });
+
   it('tells a signed-in user who is not on the team', () => {
     const { session, store } = start({ signedIn: anonymousPhone('stranger') });
     expect(session.phase.value).toBe('not-member');

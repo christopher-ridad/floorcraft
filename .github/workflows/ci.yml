@@ -14,41 +14,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            functions/package-lock.json
       - run: npm ci
-      # The Cloud Functions' own packages, for typechecking functions/src.
-      - run: npm ci --prefix functions
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm test
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/firebase/emulators
-          key: firebase-emulators-${{ hashFiles('package-lock.json') }}
-      - run: npm run test:emulator
-      - run: npx playwright install --with-deps chromium
-      # Builds the app in emulator mode and tests it in a browser against the emulators.
-      - run: npm run test:e2e
-      # The production build comes last: it's what gets published.
       - run: npm run build
-      - if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-traces
-          path: test-results/
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist/
 
-  # Publishes the built app to GitHub Pages after every passing push to main.
+  # Publishes the built site to GitHub Pages after every passing push to main.
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: check

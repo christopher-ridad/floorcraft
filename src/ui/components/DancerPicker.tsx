@@ -6,15 +6,15 @@ interface DancerPickerProps {
   emptyOption: string;
 }
 
-/** Chooses which dancer this phone gives alerts for. */
+/** Chooses which dancer this device follows (My Schedule and the Now tab). */
 export function DancerPicker({ id, label, emptyOption }: DancerPickerProps) {
   const { store, view } = useApp();
   const dancers = [...store.competition.value.dancers.keys()].sort();
   const { dancer } = store.preferences.value;
 
   const choose = (name: string) => {
-    store.actions.updatePreferences({ dancer: name });
-    if (name) view.showToast(`Alerts set for ${name}.`);
+    store.updatePreferences({ dancer: name });
+    if (name) view.showToast(`Showing ${name}'s heats.`);
   };
 
   return (

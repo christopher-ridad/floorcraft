@@ -11,7 +11,7 @@ export function PossibleHeatsToggle({ label }: { label: string }) {
       class={styles.toggle}
       role="switch"
       aria-checked={showPossibleHeats}
-      onClick={() => store.actions.updatePreferences({ showPossibleHeats: !showPossibleHeats })}
+      onClick={() => store.updatePreferences({ showPossibleHeats: !showPossibleHeats })}
     >
       <span class={styles.knob} />
       {label}

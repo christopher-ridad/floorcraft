@@ -13,26 +13,22 @@ export function PeopleView() {
   const { dancer: me } = store.preferences.value;
 
   if (!competition.couples.length) {
-    return (
-      <EmptyState title="No couples yet" linkToSetup>
-        Paste the partnerships list in Setup.
-      </EmptyState>
-    );
+    return <EmptyState title="No couples">The team's partnerships aren't loaded.</EmptyState>;
   }
 
   const names = [...competition.dancers.keys()].sort((a, b) => a.localeCompare(b));
   const viewing = view.viewingDancer.value || me || names[0];
 
   const chooseMe = (name: string) => {
-    store.actions.updatePreferences({ dancer: name });
-    view.showToast(`Alerts set for ${name}.`);
+    store.updatePreferences({ dancer: name });
+    view.showToast(`My Schedule now shows ${name}.`);
   };
 
   return (
     <>
       <div class={cx('card', 'row', styles.alertsFor)}>
         <div>
-          <div class={cx('muted', styles.alertsForLabel)}>Alerts are for</div>
+          <div class={cx('muted', styles.alertsForLabel)}>My Schedule is for</div>
           <b class={styles.alertsForName}>{me || 'No one yet'}</b>
         </div>
         {viewing && viewing !== me && (
@@ -101,7 +97,7 @@ function DancerDay({ dancer }: { dancer: string }) {
           </div>
         </>
       ) : (
-        <div class="card muted">No heats found for {dancer}. Check their entries in Setup.</div>
+        <div class="card muted">No heats found for {dancer}.</div>
       )}
     </>
   );

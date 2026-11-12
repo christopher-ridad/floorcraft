@@ -1,244 +1,58 @@
-import { computed, effect, signal, type ReadonlySignal } from '@preact/signals-core';
-import { deriveCompetition, type Competition } from '../domain/competition';
-import { resolveCouples } from '../domain/team';
-import {
-  randomId,
-  type CompetitionInfo,
-  type Couple,
-  type IdFactory,
-  type LiveState,
-  type ScheduleItem,
-} from '../domain/types';
-import { createActions, type Actions } from './actions';
-import { watchAlerts, type AlertWatcher } from './alertWatcher';
-import { NoticeChannel, type NoticeListener } from './notices';
-import {
-  SyncFailure,
-  type AlertOutput,
-  type Clock,
-  type CompetitionSnapshot,
-  type Connectivity,
-  type HeatSheetRepository,
-  type PreferencesStore,
-  type ScreenWakeLock,
-  type SyncErrorCode,
-  type SyncMode,
-  type TeamSnapshot,
-} from './ports';
+import { computed, signal, type ReadonlySignal } from '@preact/signals-core';
+import type { Competition } from '../domain/competition';
+import { purdueCompetition } from '../domain/purdue';
 import type { Preferences } from './preferences';
 
-export const EMPTY_TEAM: TeamSnapshot = {
-  team: null,
-  dancers: [],
-  partnerships: [],
-  competitions: [],
-};
-export const EMPTY_COMPETITION: CompetitionSnapshot = {
-  schedule: { items: [], events: [] },
-  entries: {},
-  floor: { currentItemId: null, currentSetAt: null },
-  callbacks: {},
-};
+/** How often "now" moves along the schedule. */
+const TICK_MS = 30_000;
 
-export interface AppDependencies {
-  repository: HeatSheetRepository;
-  preferences: PreferencesStore;
-  clock: Clock;
-  alertOutput: AlertOutput;
-  wakeLock: ScreenWakeLock;
-  /** Defaults to always online. */
-  connectivity?: Connectivity;
-  createId?: IdFactory;
+export interface PreferencesStore {
+  load(): Preferences;
+  save(preferences: Preferences): void;
 }
 
-export interface LoadedData {
-  team: boolean;
-  /** The active competition's data has arrived. */
-  competition: boolean;
+export interface Clock {
+  now(): number;
+}
+
+export interface AppDependencies {
+  preferences: PreferencesStore;
+  clock: Clock;
 }
 
 export interface AppStore {
-  team: ReadonlySignal<TeamSnapshot>;
-  /** The competition everyone sees, or null before one is set up. */
-  activeCompetition: ReadonlySignal<CompetitionInfo | null>;
-  competitionData: ReadonlySignal<CompetitionSnapshot>;
-  schedule: ReadonlySignal<ScheduleItem[]>;
-  couples: ReadonlySignal<Couple[]>;
-  live: ReadonlySignal<LiveState>;
-  loaded: ReadonlySignal<LoadedData>;
-  syncMode: ReadonlySignal<SyncMode>;
-  /** Why the team's data can't be read or written, if it can't. */
-  syncError: ReadonlySignal<SyncErrorCode | null>;
-  isOnline: ReadonlySignal<boolean>;
-  /** Changes made on this phone that the server hasn't confirmed yet (e.g. while offline). */
-  pendingWrites: ReadonlySignal<number>;
-  preferences: ReadonlySignal<Preferences>;
-  /** Everything derived for the active competition. Recomputed only when its inputs change. */
+  /** The schedule and the team's heats, with "now" placed by the clock. */
   competition: ReadonlySignal<Competition>;
-  actions: Actions;
-  onNotice(listener: NoticeListener): () => void;
-  /** Starts watching the team's data, alerts and keep-awake. Does nothing if already started. */
-  start(): void;
-  /** Stops watching and clears the team's data. The store can be started again. */
-  dispose(): void;
+  preferences: ReadonlySignal<Preferences>;
+  updatePreferences(change: Partial<Preferences>): void;
+  /** Catches "now" up with the clock, e.g. when the page is shown again. */
+  refresh(): void;
+  /** Starts following the clock. Returns a function that stops it. */
+  start(): () => void;
 }
 
 export function createAppStore(deps: AppDependencies): AppStore {
-  const { repository } = deps;
-  const team = signal<TeamSnapshot>(EMPTY_TEAM);
-  const competitionData = signal<CompetitionSnapshot>(EMPTY_COMPETITION);
-  const loaded = signal<LoadedData>({ team: false, competition: false });
-  const syncMode = signal<SyncMode>('connecting');
-  const syncError = signal<SyncErrorCode | null>(null);
-  const preferences = signal<Preferences>(deps.preferences.load());
-  const notices = new NoticeChannel();
-  const connectivity = deps.connectivity ?? { isOnline: () => true, onChange: () => () => {} };
-  const isOnline = signal(connectivity.isOnline());
-  const pendingWrites = signal(0);
-
-  const activeCompetitionId = computed(() => team.value.team?.activeCompetitionId ?? null);
-  const activeCompetition = computed(
-    () => team.value.competitions.find((info) => info.id === activeCompetitionId.value) ?? null,
-  );
-  const couples = computed(() => resolveCouples(team.value.dancers, team.value.partnerships));
-  const live = computed<LiveState>(() => ({
-    ...competitionData.value.floor,
-    callbacks: competitionData.value.callbacks,
-  }));
-  const schedule = computed(() => competitionData.value.schedule.items);
-  const competition = computed(() =>
-    deriveCompetition({
-      schedule: schedule.value,
-      events: competitionData.value.schedule.events,
-      couples: couples.value,
-      entries: competitionData.value.entries,
-      live: live.value,
-      date: activeCompetition.value?.date,
-    }),
-  );
-
-  /**
-   * Tracks a write until the server confirms it, and reports it if it fails. The change itself
-   * shows (or not) through the watchers.
-   */
-  function save(write: Promise<void>) {
-    pendingWrites.value++;
-    write
-      .catch((error: unknown) => {
-        notices.publish({
-          kind: 'save-failed',
-          code: error instanceof SyncFailure ? error.code : 'network',
-          detail: error instanceof Error ? error.message : String(error),
-        });
-      })
-      .finally(() => pendingWrites.value--);
-  }
-
-  let alertWatcher: AlertWatcher | null = null;
-  const stops: (() => void)[] = [];
-
-  function watchTeam() {
-    return repository.watchTeam(
-      (snapshot) => {
-        team.value = snapshot;
-        syncMode.value = repository.isShared ? 'shared' : 'local';
-        syncError.value = null;
-        if (!loaded.peek().team) loaded.value = { ...loaded.peek(), team: true };
-      },
-      (code) => (syncError.value = code),
-    );
-  }
-
-  /** Follows whichever competition is active. */
-  function watchActiveCompetition() {
-    return effect(() => {
-      const competitionId = activeCompetitionId.value;
-      competitionData.value = EMPTY_COMPETITION;
-      loaded.value = { ...loaded.peek(), competition: false };
-      if (!competitionId) return;
-      return repository.watchCompetition(
-        competitionId,
-        (snapshot) => {
-          competitionData.value = snapshot;
-          if (!loaded.peek().competition) loaded.value = { ...loaded.peek(), competition: true };
-        },
-        (code) => (syncError.value = code),
-      );
-    });
-  }
-
-  function watchWakeLock() {
-    return effect(() => {
-      if (!preferences.value.keepScreenAwake) {
-        void deps.wakeLock.disable();
-        return;
-      }
-      void deps.wakeLock.enable().then((granted) => {
-        if (granted) return;
-        actions.updatePreferences({ keepScreenAwake: false });
-        notices.publish({ kind: 'wake-lock-refused' });
-      });
-    });
-  }
-
-  const actions = createActions({
-    repository,
-    team,
-    competitionData,
-    activeCompetition,
-    competition,
-    preferences,
-    save,
-    clock: deps.clock,
-    createId: deps.createId ?? randomId,
-    savePreferences: (value) => deps.preferences.save(value),
-    forgetGivenAlerts: () => alertWatcher?.forgetGiven(),
-    playTestAlert: () => alertWatcher?.playTest(),
-  });
+  const now = signal(deps.clock.now());
+  const preferences = signal(deps.preferences.load());
+  const competition = computed(() => purdueCompetition(now.value));
 
   return {
-    team,
-    activeCompetition,
-    competitionData,
-    schedule,
-    couples,
-    live,
-    loaded,
-    syncMode,
-    syncError,
-    isOnline,
-    pendingWrites,
-    preferences,
     competition,
-    actions,
-    onNotice: (listener) => notices.subscribe(listener),
+    preferences,
 
-    start() {
-      if (stops.length) return;
-      alertWatcher = watchAlerts({
-        competition,
-        preferences,
-        output: deps.alertOutput,
-        notices,
-        clock: deps.clock,
-      });
-      stops.push(
-        connectivity.onChange((online) => (isOnline.value = online)),
-        () => alertWatcher?.dispose(),
-        watchWakeLock(),
-        watchTeam(),
-        watchActiveCompetition(),
-      );
+    updatePreferences(change) {
+      const next = { ...preferences.peek(), ...change };
+      preferences.value = next;
+      deps.preferences.save(next);
     },
 
-    dispose() {
-      while (stops.length) stops.pop()?.();
-      // Nothing from a previous session stays on screen (e.g. after signing out).
-      team.value = EMPTY_TEAM;
-      competitionData.value = EMPTY_COMPETITION;
-      loaded.value = { team: false, competition: false };
-      syncMode.value = 'connecting';
-      syncError.value = null;
+    refresh() {
+      now.value = deps.clock.now();
+    },
+
+    start() {
+      const timer = setInterval(() => (now.value = deps.clock.now()), TICK_MS);
+      return () => clearInterval(timer);
     },
   };
 }

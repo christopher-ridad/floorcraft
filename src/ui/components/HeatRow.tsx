@@ -21,9 +21,9 @@ interface HeatRowProps {
   dancer?: string | null;
 }
 
-/** One heat in a list. Tapping it opens the heat's sheet. */
+/** One heat in a list. */
 export function HeatRow({ heat, showAway = false, dancer = null }: HeatRowProps) {
-  const { store, view } = useApp();
+  const { store } = useApp();
   const competition = store.competition.value;
   const preferences = store.preferences.value;
   const info = competition.items.get(heat.id);
@@ -53,7 +53,7 @@ export function HeatRow({ heat, showAway = false, dancer = null }: HeatRowProps)
   const wasCalledBack = !!dancer && info.heatName.round > team.firstRound;
 
   return (
-    <button
+    <div
       class={cx(
         styles.heat,
         `lane-${info.heatName.style}`,
@@ -65,7 +65,6 @@ export function HeatRow({ heat, showAway = false, dancer = null }: HeatRowProps)
       data-heat-row
       data-now={isNow || undefined}
       data-done={isDone || undefined}
-      onClick={() => view.openItem(heat.id)}
     >
       <span class={styles.when}>
         <span class={styles.time}>{formatClockTime(info.scheduledMinutes)}</span>
@@ -94,24 +93,20 @@ export function HeatRow({ heat, showAway = false, dancer = null }: HeatRowProps)
             )
           : hasTeam(team) && <TeamChips team={team} />}
       </span>
-    </button>
+    </div>
   );
 }
 
-/** A break or section line in a list. Tapping it opens its sheet. */
+/** A break or section line in a list. */
 export function BreakRow({ item }: { item: ScheduleBreak }) {
-  const { store, view } = useApp();
+  const { store } = useApp();
   const competition = store.competition.value;
   const info = competition.items.get(item.id);
   const isNow = info?.index === competition.currentIndex;
   return (
-    <button
-      class={cx(styles.break, isNow && styles.now)}
-      data-now={isNow || undefined}
-      onClick={() => view.openItem(item.id)}
-    >
+    <div class={cx(styles.break, isNow && styles.now)} data-now={isNow || undefined}>
       <span class="mono">{formatClockTime(info?.scheduledMinutes ?? null)}</span>
       <span>{item.label}</span>
-    </button>
+    </div>
   );
 }

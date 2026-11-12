@@ -1,45 +1,34 @@
 import type { JSX } from 'preact';
-import { useEffect } from 'preact/hooks';
-import type { Session } from '../app/session';
 import type { AppStore } from '../app/store';
-import { paceStatus } from '../domain/pace';
-import { AccessScreen } from './AccessScreens';
-import { HeatSheet } from './components/HeatSheet';
+import { localDate } from '../domain/clock';
+import { PURDUE_CLASSIC } from '../domain/purdue';
 import { AppContext, useApp } from './context';
-import { cx, noticeText, offlineLabel, paceLabel } from './format';
 import type { Tab, ViewState } from './viewState';
 import { NowView } from './views/NowView';
 import { PeopleView } from './views/PeopleView';
 import { ScheduleView } from './views/ScheduleView';
-import { SetupView } from './views/SetupView';
 import styles from './App.module.css';
 
 const VIEWS: Record<Tab, () => JSX.Element | null> = {
   now: NowView,
   schedule: ScheduleView,
   people: PeopleView,
-  setup: SetupView,
 };
 
 interface AppProps {
   store: AppStore;
-  session: Session;
   view: ViewState;
 }
 
-export function App({ store, session, view }: AppProps) {
-  // Alerts, failed saves and other notices from the store show as toasts.
-  useEffect(() => store.onNotice((notice) => view.showToast(noticeText(notice))), [store, view]);
-
+export function App({ store, view }: AppProps) {
   return (
-    <AppContext.Provider value={{ store, session, view }}>
-      {session.phase.value === 'ready' ? <HeatSheetApp /> : <AccessScreen />}
+    <AppContext.Provider value={{ store, view }}>
+      <HeatSheetApp />
       <Toast />
     </AppContext.Provider>
   );
 }
 
-/** The app itself, once this phone is on the team. */
 function HeatSheetApp() {
   const { view } = useApp();
   const CurrentView = VIEWS[view.tab.value];
@@ -49,46 +38,36 @@ function HeatSheetApp() {
       <main class={styles.main}>
         <CurrentView />
       </main>
-      <TabBar />
-      <HeatSheet />
     </>
   );
 }
 
-const SYNC_TITLES = {
-  shared: 'Synced with the team',
-  local: 'This phone only',
-  connecting: 'Connecting',
-} as const;
+/** The day, written out, e.g. `Sat, Nov 14`. */
+const competitionDay = new Date(`${PURDUE_CLASSIC.date}T12:00:00`).toLocaleDateString('en-US', {
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+});
+
+/** Whether the competition is on, by the date and the posted times. */
+function statusText(store: AppStore): string {
+  const today = localDate(Date.now());
+  if (today < PURDUE_CLASSIC.date) return competitionDay;
+  if (today > PURDUE_CLASSIC.date) return 'Finished';
+  return store.competition.value.currentIndex >= 0 ? 'Today · by the posted times' : 'Today';
+}
 
 function TopBar() {
   const { store } = useApp();
-  const pace = paceLabel(paceStatus(store.competition.value));
-  const mode = store.syncMode.value;
   return (
     <header class={styles.top}>
       <div class={styles.brand}>
         Heat Sheet
-        <small>{store.activeCompetition.value?.name ?? store.team.value.team?.name ?? ''}</small>
+        <small>{PURDUE_CLASSIC.name}</small>
       </div>
+      <TabBar />
       <div class={styles.spacer} />
-      {store.isOnline.value ? (
-        <span class={cx(styles.pace, pace.isOffSchedule && styles.offSchedule)}>{pace.text}</span>
-      ) : (
-        <span class={cx(styles.pace, styles.offSchedule)} role="status">
-          {offlineLabel(store.pendingWrites.value)}
-        </span>
-      )}
-      <span
-        class={cx(
-          styles.sync,
-          mode === 'shared' && styles.shared,
-          mode === 'local' && styles.local,
-        )}
-        title={SYNC_TITLES[mode]}
-        role="img"
-        aria-label={SYNC_TITLES[mode]}
-      />
+      <span class={styles.pace}>{statusText(store)}</span>
     </header>
   );
 }
@@ -117,19 +96,9 @@ const TABS: readonly { tab: Tab; label: string; icon: JSX.Element }[] = [
       </>
     ),
   },
-  {
-    tab: 'setup',
-    label: 'Setup',
-    icon: (
-      <>
-        <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
-        <circle cx="16" cy="7" r="2" />
-        <circle cx="10" cy="17" r="2" />
-      </>
-    ),
-  },
 ];
 
+/** Bottom tabs on a phone; a menu in the top bar on a wider screen. */
 function TabBar() {
   const { view } = useApp();
   const showTab = (tab: Tab) => {

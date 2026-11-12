@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { isInCouple } from '../../domain/dancers';
-import { NoSchedule } from '../components/EmptyState';
 import { BreakRow, HeatRow } from '../components/HeatRow';
 import { PossibleHeatsLegend } from '../components/PossibleHeats';
 import { useApp } from '../context';
@@ -13,7 +12,7 @@ const FILTERS: readonly [ScheduleFilter, string][] = [
   ['all', 'Entire Schedule'],
 ];
 
-/** Scrolls the heat on the floor (or the first one not yet danced) into the middle of the view. */
+/** Scrolls the item happening now (or the first one not yet danced) into the middle of the view. */
 function scrollToNow(list: HTMLElement | null) {
   const target =
     list?.querySelector('[data-now]') ?? list?.querySelector('[data-heat-row]:not([data-done])');
@@ -29,8 +28,6 @@ export function ScheduleView() {
 
   // Opening the tab or changing the filter jumps to where the competition is.
   useEffect(() => scrollToNow(list.current), [filter]);
-
-  if (!competition.schedule.length) return <NoSchedule />;
 
   const header = (
     <div class="row nowrap">
@@ -79,9 +76,6 @@ export function ScheduleView() {
       <div class="list" ref={list}>
         {rows.length ? rows : <div class="empty">No heats match.</div>}
       </div>
-      <p class={`muted ${styles.hint}`}>
-        Tap a heat to mark it on the floor, record callbacks, or fix its time.
-      </p>
     </>
   );
 }

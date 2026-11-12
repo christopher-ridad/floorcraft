@@ -1,49 +1,24 @@
-import type { PreferencesStore } from '../../app/ports';
 import { DEFAULT_PREFERENCES, type Preferences } from '../../app/preferences';
+import type { PreferencesStore } from '../../app/store';
 import { readJson, type KeyValueStorage } from '../storage/keyValueStorage';
 
 const KEY = 'floorcraft:preferences';
-/** The original app's key, with fields me, threshold (ignored now), sound, vibrate, awake, showMaybe. */
-const LEGACY_KEY = 'hs:prefs';
-
-type StoredPreferences = { [Key in keyof Preferences]?: unknown };
-
-function fromLegacy(legacy: Record<string, unknown>): StoredPreferences {
-  return {
-    dancer: legacy.me,
-    chime: legacy.sound,
-    vibrate: legacy.vibrate,
-    keepScreenAwake: legacy.awake,
-    showPossibleHeats: legacy.showMaybe,
-  };
-}
 
 /** Keeps each stored field only if it has the right type. */
-function withDefaults(stored: StoredPreferences): Preferences {
+function withDefaults(stored: Record<string, unknown>): Preferences {
   const pick = <Key extends keyof Preferences>(key: Key): Preferences[Key] =>
     typeof stored[key] === typeof DEFAULT_PREFERENCES[key]
       ? (stored[key] as Preferences[Key])
       : DEFAULT_PREFERENCES[key];
-  return {
-    dancer: pick('dancer'),
-    chime: pick('chime'),
-    vibrate: pick('vibrate'),
-    keepScreenAwake: pick('keepScreenAwake'),
-    showPossibleHeats: pick('showPossibleHeats'),
-    skipDancerClaim: pick('skipDancerClaim'),
-  };
+  return { dancer: pick('dancer'), showPossibleHeats: pick('showPossibleHeats') };
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
+/** This device's settings, in browser storage. */
 export function preferencesStorage(storage: KeyValueStorage): PreferencesStore {
   return {
     load() {
       const stored = readJson(storage, KEY);
-      if (isRecord(stored)) return withDefaults(stored);
-      const legacy = readJson(storage, LEGACY_KEY);
-      return withDefaults(isRecord(legacy) ? fromLegacy(legacy) : {});
+      return withDefaults(typeof stored === 'object' && stored !== null ? { ...stored } : {});
     },
     save(preferences) {
       storage.set(KEY, JSON.stringify(preferences));

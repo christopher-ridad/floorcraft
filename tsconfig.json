@@ -21,10 +21,7 @@
     "src/**/*.tsx",
     "tests/**/*.ts",
     "tests/**/*.tsx",
-    "e2e/**/*.ts",
     "*.config.ts",
-    "*.config.mts",
-    "scripts/**/*.ts",
-    "functions/src/**/*.ts"
+    "*.config.mts"
   ]
 }

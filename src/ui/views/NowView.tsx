@@ -1,5 +1,3 @@
-import { isOnDeckTime } from '../../domain/alerts';
-import { pendingCallbacks } from '../../domain/callbacks';
 import type { Competition } from '../../domain/competition';
 import { formatClockTime } from '../../domain/clock';
 import {
@@ -9,28 +7,26 @@ import {
   type UpcomingHeat,
 } from '../../domain/dancers';
 import { estimatedMinutes, heatsAway } from '../../domain/pace';
+import { PURDUE_CLASSIC } from '../../domain/purdue';
 import type { Heat } from '../../domain/types';
 import { hasTeam, TeamChips } from '../components/CoupleChip';
-import { NoSchedule } from '../components/EmptyState';
-import { NotificationsCard } from '../components/NotificationsCard';
 import { HeatRow } from '../components/HeatRow';
 import { PossibleHeatsToggle } from '../components/PossibleHeats';
 import { DancerPicker } from '../components/DancerPicker';
 import { useApp, useMinuteOfDay } from '../context';
-import { coupleName, cx, partnerName, roundLabel } from '../format';
+import { cx, partnerName, roundLabel } from '../format';
 import styles from './NowView.module.css';
 
 const TEAM_UP_NEXT_COUNT = 8;
+/** Within this many minutes of your heat, it's time to be on deck. */
+const ON_DECK_MINUTES = 15;
 
 export function NowView() {
   const { store } = useApp();
-  if (!store.schedule.value.length) return <NoSchedule />;
   return (
     <>
       {store.preferences.value.dancer ? <MyNextHeat /> : <WhoAreYou />}
-      {store.preferences.value.dancer && <NotificationsCard onlyIfNeeded />}
-      <OnTheFloor />
-      <CallbacksToEnter />
+      <HappeningNow />
       <TeamUpNext />
     </>
   );
@@ -41,7 +37,7 @@ function WhoAreYou() {
     <div class="card">
       <DancerPicker
         id="whoAreYou"
-        label="Who are you? Pick your name to get alerts before your heats."
+        label="Who are you? Pick your name to see your next heat here."
         emptyOption="Choose your name"
       />
     </div>
@@ -135,7 +131,8 @@ function MyNextHeat() {
   if (next) {
     const nextAway = away(next.heat);
     const nextEstimate = estimate(next.heat);
-    const isOnDeck = nextAway !== null && isOnDeckTime(nextEstimate, minuteOfDay);
+    const isOnDeck =
+      nextAway !== null && nextEstimate !== null && nextEstimate - minuteOfDay <= ON_DECK_MINUTES;
     const isHot = nextAway === 1 || isOnDeck;
     const minutesUntil = nextEstimate === null ? 0 : Math.round(nextEstimate - minuteOfDay);
     const headline =
@@ -171,24 +168,23 @@ function MyNextHeat() {
   );
 }
 
-/** What's on the floor, and the buttons that move it. */
-function OnTheFloor() {
+/** What the posted times say is on the floor now. */
+function HappeningNow() {
   const { store } = useApp();
   const competition = store.competition.value;
   const current = competition.schedule[competition.currentIndex];
+  const first = competition.schedule[0];
 
   if (!current) {
     return (
       <section class={cx(styles.floor, 'lane-other')}>
-        <div class={styles.label}>Competition not started</div>
-        <div class={styles.name}>Times below are the posted schedule</div>
-        <div class="muted">
-          When the first heat is called, tap below. Each tap after that moves everyone's estimates.
+        <div class={styles.label}>Not started</div>
+        <div class={styles.name}>
+          {PURDUE_CLASSIC.name}
+          {first && ` starts at ${first.scheduledTime}`}
         </div>
-        <div class={cx(styles.controls, styles.single)}>
-          <button class="btn primary" onClick={() => store.actions.advanceFloor()}>
-            First heat is on the floor
-          </button>
+        <div class="muted">
+          On competition day this shows what's on the floor by the posted times.
         </div>
       </section>
     );
@@ -200,7 +196,7 @@ function OnTheFloor() {
     <section class={cx(styles.floor, `lane-${info?.heatName?.style ?? 'other'}`)}>
       <div class={styles.label}>
         <span class={styles.dot} />
-        On the floor
+        Happening now, by the schedule
         {current.kind === 'heat' && (
           <>
             {' '}
@@ -229,77 +225,8 @@ function OnTheFloor() {
           <div class={cx('muted', styles.nobody)}>No one from the team in this heat.</div>
         )
       )}
-      <div class={styles.controls}>
-        <button
-          class="btn"
-          aria-label="Previous heat"
-          onClick={() => store.actions.moveFloorBack()}
-        >
-          Back
-        </button>
-        <button class="btn primary" onClick={() => store.actions.advanceFloor()}>
-          Next heat is up
-        </button>
-      </div>
+      <div class="muted">The floor often runs a little behind the posted times.</div>
     </section>
-  );
-}
-
-/** Rounds the team has danced whose callback result hasn't been entered. */
-function CallbacksToEnter() {
-  const { store, view } = useApp();
-  const competition = store.competition.value;
-  const pending = pendingCallbacks(competition);
-  if (!pending.length) return null;
-
-  return (
-    <>
-      <h2>Callbacks to enter · {pending.length}</h2>
-      <div class="card">
-        {pending.map((callback) => {
-          const record = (reachedRound: typeof callback.reachedRound, eliminated: boolean) => {
-            store.actions.recordCallback({
-              coupleId: callback.couple.id,
-              eventId: callback.eventId,
-              reachedRound,
-              eliminated,
-            });
-            view.showToast(eliminated ? 'Marked not called back.' : 'Callback saved.');
-          };
-          return (
-            <div class={styles.callback} key={`${callback.couple.id}_${callback.eventId}`}>
-              <div class={styles.question}>
-                {callback.isOverdue && <span class={styles.overdue}>Overdue</span>}
-                <b>{coupleName(callback.couple)}</b> · {heatTitle(competition, callback.dancedHeat)}
-                <br />
-                <span class="muted">
-                  Danced the {heatRound(competition, callback.dancedHeat)}.{' '}
-                  {callback.isOverdue ? (
-                    <>
-                      The {heatRound(competition, callback.nextHeat)} has started. Were they called
-                      back?
-                    </>
-                  ) : (
-                    <>
-                      Called back to the {heatRound(competition, callback.nextHeat)}? (heat at{' '}
-                      {formatClockTime(estimatedMinutes(competition, callback.nextHeat.id))})
-                    </>
-                  )}
-                </span>
-              </div>
-              <div class={styles.answers}>
-                <button class="btn small yes" onClick={() => record(callback.nextRound, false)}>
-                  Called back
-                </button>
-                <button class="btn small no" onClick={() => record(callback.reachedRound, true)}>
-                  Not called back
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </>
   );
 }
 

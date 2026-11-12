@@ -1,7 +1,12 @@
 /** The one competition this app is for. */
 
+import { localDate, minutesSinceMidnight, parseClockTime } from './clock';
+import { deriveCompetition, type Competition } from './competition';
+import { parsePartnershipRows } from './entries/parsePartnershipRows';
+import { buildEventCatalog } from './schedule/eventCatalog';
 import { parseSchedule, type ParseScheduleOptions } from './schedule/parseSchedule';
-import type { Schedule, ScheduleItem } from './types';
+import { importPartnerships, resolveCouples } from './team';
+import type { Couple, Entries, IdFactory, Schedule, ScheduleItem } from './types';
 
 export const PURDUE_CLASSIC = {
   name: 'Purdue Ballroom Classic',
@@ -198,12 +203,6 @@ Alice	TBA	Silver	Silver I. Standard (WQ), Silver I. Standard (TF)
 `;
 
 /**
- * Bump when the built-in schedule or partnerships change, so each team picks the new version up
- * once (see `applyOfficialData`), without undoing day-of edits made after that.
- */
-export const OFFICIAL_DATA_VERSION = 1;
-
-/**
  * The official schedule, as stored data. Pass the current schedule's events so events that match
  * keep their ids, and couples' entries and callback marks stay attached.
  */
@@ -226,4 +225,70 @@ export function isOfficialSchedule(items: readonly ScheduleItem[]): boolean {
   return (
     items.length === keys.length && items.every((item, index) => lineKey(item) === keys[index])
   );
+}
+
+/** Ids that are the same every time the page loads. */
+const sequentialIds = (prefix: string): IdFactory => {
+  let next = 0;
+  return () => `${prefix}${++next}`;
+};
+
+interface PurdueData {
+  schedule: Schedule;
+  couples: Couple[];
+  entries: Entries;
+}
+
+let purdueData: PurdueData | undefined;
+
+/** The schedule, the team's couples and what each dances, all from the built-in text. */
+export function loadPurdueData(): PurdueData {
+  if (purdueData) return purdueData;
+  const schedule = officialSchedule({ createId: sequentialIds('item') });
+  const roster = importPartnerships(
+    parsePartnershipRows(OFFICIAL_PARTNERSHIPS_TEXT),
+    { dancers: [], partnerships: [] },
+    buildEventCatalog(schedule.events),
+    sequentialIds('team'),
+  );
+  purdueData = {
+    schedule,
+    couples: resolveCouples(roster.dancers, roster.partnerships),
+    entries: roster.entries,
+  };
+  return purdueData;
+}
+
+/**
+ * The schedule item the posted times say is happening at `now`: the last one that has started.
+ * Null on any day but competition day, and before the first item.
+ */
+export function itemAtTime(
+  items: readonly ScheduleItem[],
+  now: number,
+  date: string = PURDUE_CLASSIC.date,
+): ScheduleItem | null {
+  if (localDate(now) !== date) return null;
+  const minutes = minutesSinceMidnight(new Date(now));
+  let current: ScheduleItem | null = null;
+  for (const item of items) {
+    const start = parseClockTime(item.scheduledTime);
+    if (start === null || start > minutes) break;
+    current = item;
+  }
+  return current;
+}
+
+/** Everything the site shows at `now`: the posted schedule, with "now" placed by the clock. */
+export function purdueCompetition(now: number): Competition {
+  const { schedule, couples, entries } = loadPurdueData();
+  const current = itemAtTime(schedule.items, now);
+  return deriveCompetition({
+    schedule: schedule.items,
+    events: schedule.events,
+    couples,
+    entries,
+    live: { currentItemId: current?.id ?? null, currentSetAt: null, callbacks: {} },
+    date: PURDUE_CLASSIC.date,
+  });
 }

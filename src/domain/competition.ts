@@ -1,10 +1,9 @@
-import { callbackKey, callbackStatus } from './callbacks';
 import { localDate, minutesSinceMidnight, parseClockTime } from './clock';
 import { dancerName } from './dancers';
 import { roundsByEvent, type RoundsByEvent } from './rounds';
 import { buildEventCatalog, type EventCatalog } from './schedule/eventCatalog';
 import { parseHeatName, type HeatName } from './schedule/heatName';
-import type { Couple, Entries, EventDetails, LiveState, Round, ScheduleItem } from './types';
+import type { Couple, Entries, EventDetails, FloorState, ScheduleItem } from './types';
 
 /**
  * Without the competition's date, a delay this large means the floor was set on another day, so
@@ -17,7 +16,7 @@ export interface CompetitionState {
   events: readonly EventDetails[];
   couples: readonly Couple[];
   entries: Entries;
-  live: LiveState;
+  live: FloorState;
   /** The competition's date, `YYYY-MM-DD`. A floor position set on another day is ignored. */
   date?: string;
 }
@@ -35,16 +34,20 @@ export interface ItemInfo {
   heatName: HeatName | null;
 }
 
-/** The team's couples in one heat, by callback status. */
+/** The team's couples in one heat. */
 export interface HeatTeam {
-  dancing: Couple[];
-  possible: Couple[];
-  eliminated: Couple[];
-  firstRound: Round;
+  couples: Couple[];
+  /**
+   * True for an event's later rounds (quarterfinal, semi, final): couples only dance them if
+   * called back. Callbacks aren't tracked, so these are shown with a note instead.
+   */
+  ifCalledBack: boolean;
 }
 
 export interface DancerSummary {
+  /** First rounds and single-round events. */
   confirmedHeats: number;
+  /** Later rounds, danced only if called back. */
   possibleHeats: number;
 }
 
@@ -80,14 +83,10 @@ export function deriveCompetition(state: CompetitionState): Competition {
     if (item.kind !== 'heat') continue;
     const round = items.get(item.id)?.heatName?.round ?? 5;
     const first = rounds.get(item.eventId)?.[0] ?? round;
-    const team: HeatTeam = { dancing: [], possible: [], eliminated: [], firstRound: first };
-    for (const couple of couples) {
-      if (!coupleEvents.get(couple.id)?.includes(item.eventId)) continue;
-      const mark = live.callbacks[callbackKey(couple.id, item.eventId)];
-      const status = callbackStatus(mark, round, first);
-      team[status].push(couple);
-    }
-    heatTeams.set(item.id, team);
+    heatTeams.set(item.id, {
+      couples: couples.filter((couple) => coupleEvents.get(couple.id)?.includes(item.eventId)),
+      ifCalledBack: round > first,
+    });
   }
 
   const currentIndex = live.currentItemId
@@ -166,17 +165,14 @@ function summarizeDancers(
       }
     }
   }
-  const count = (couplesInHeat: Couple[], field: keyof DancerSummary) => {
-    for (const couple of couplesInHeat) {
+  for (const team of heatTeams.values()) {
+    const field = team.ifCalledBack ? 'possibleHeats' : 'confirmedHeats';
+    for (const couple of team.couples) {
       for (const name of [couple.lead, couple.follow]) {
         const summary = dancers.get(dancerName(name));
         if (summary) summary[field]++;
       }
     }
-  };
-  for (const team of heatTeams.values()) {
-    count(team.dancing, 'confirmedHeats');
-    count(team.possible, 'possibleHeats');
   }
   return dancers;
 }

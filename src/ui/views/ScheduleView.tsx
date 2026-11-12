@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { isInCouple } from '../../domain/dancers';
 import { BreakRow, HeatRow } from '../components/HeatRow';
-import { PossibleHeatsLegend } from '../components/PossibleHeats';
 import { useApp } from '../context';
 import type { ScheduleFilter } from '../viewState';
 import styles from './ScheduleView.module.css';
@@ -61,7 +60,7 @@ export function ScheduleView() {
     if (item.kind === 'break')
       return filter === 'mine' ? [] : [<BreakRow key={item.id} item={item} />];
     const team = competition.heatTeams.get(item.id);
-    const couples = team ? [...team.dancing, ...team.possible] : [];
+    const couples = team?.couples ?? [];
     if (filter === 'team' && !couples.length) return [];
     if (filter === 'mine' && !couples.some((couple) => isInCouple(couple, dancer))) return [];
     return [
@@ -72,7 +71,6 @@ export function ScheduleView() {
   return (
     <>
       {header}
-      <PossibleHeatsLegend />
       <div class="list" ref={list}>
         {rows.length ? rows : <div class="empty">No heats match.</div>}
       </div>

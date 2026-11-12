@@ -14,10 +14,7 @@ interface HeatRowProps {
   heat: Heat;
   /** Show "N away" for upcoming heats. */
   showAway?: boolean;
-  /**
-   * Show the heat from one dancer's point of view: tentative unless they are confirmed in it,
-   * and their partner instead of the team's chips.
-   */
+  /** Show the heat from one dancer's point of view: their partner instead of the team's chips. */
   dancer?: string | null;
 }
 
@@ -33,13 +30,8 @@ export function HeatRow({ heat, showAway = false, dancer = null }: HeatRowProps)
   const { currentIndex } = competition;
   const isNow = info.index === currentIndex;
   const isDone = currentIndex >= 0 && info.index < currentIndex;
-  const isTentative = dancer
-    ? !team.dancing.some((couple) => isInCouple(couple, dancer))
-    : team.dancing.length === 0 && team.possible.length > 0;
-  if (isTentative && !preferences.showPossibleHeats && !isNow) return null;
-
   const isMine =
-    !!preferences.dancer && team.dancing.some((couple) => isInCouple(couple, preferences.dancer));
+    !!preferences.dancer && team.couples.some((couple) => isInCouple(couple, preferences.dancer));
   const estimate = estimatedMinutes(competition, heat.id);
   const showEstimate =
     currentIndex >= 0 &&
@@ -48,9 +40,7 @@ export function HeatRow({ heat, showAway = false, dancer = null }: HeatRowProps)
     info.scheduledMinutes !== null &&
     Math.abs(estimate - info.scheduledMinutes) >= MIN_SHOWN_DRIFT_MINUTES;
   const away = heatsAway(competition, heat.id);
-  const dancersCouple =
-    dancer && [...team.dancing, ...team.possible].find((couple) => isInCouple(couple, dancer));
-  const wasCalledBack = !!dancer && info.heatName.round > team.firstRound;
+  const dancersCouple = dancer && team.couples.find((couple) => isInCouple(couple, dancer));
 
   return (
     <div
@@ -59,7 +49,6 @@ export function HeatRow({ heat, showAway = false, dancer = null }: HeatRowProps)
         `lane-${info.heatName.style}`,
         isDone && styles.done,
         isNow && styles.now,
-        isTentative && styles.tentative,
         isMine && styles.mine,
       )}
       data-heat-row
@@ -79,11 +68,7 @@ export function HeatRow({ heat, showAway = false, dancer = null }: HeatRowProps)
         <span class={cx('row', styles.details)}>
           <span class="round">{roundLabel(info.heatName)}</span>
           {info.heatName.dances && <span class="dances">{info.heatName.dances}</span>}
-          {isTentative ? (
-            <span class={styles.ifCalledBack}>If called back</span>
-          ) : (
-            wasCalledBack && <span class={styles.calledBack}>Called back</span>
-          )}
+          {team.ifCalledBack && <span class={styles.ifCalledBack}>If called back</span>}
         </span>
         {dancer
           ? dancersCouple && (

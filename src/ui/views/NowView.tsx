@@ -9,7 +9,6 @@ import {
 import { estimatedMinutes, heatsAway } from '../../domain/pace';
 import type { Heat } from '../../domain/types';
 import { HeatRow } from '../components/HeatRow';
-import { PossibleHeatsToggle } from '../components/PossibleHeats';
 import { DancerPicker } from '../components/DancerPicker';
 import { useApp, useMinuteOfDay } from '../context';
 import { cx, partnerName, roundLabel } from '../format';
@@ -53,7 +52,7 @@ function heatRound(competition: Competition, heat: Heat) {
   return heatName ? roundLabel(heatName) : '';
 }
 
-/** The dancer's next heat: how far away it is, or what they're waiting on. */
+/** The dancer's next heat and how far away it is. Later rounds say they need a callback. */
 function MyNextHeat() {
   const { store } = useApp();
   const minuteOfDay = useMinuteOfDay();
@@ -68,57 +67,27 @@ function MyNextHeat() {
     currentIndex >= 0
       ? upcoming.find(({ heat }) => indexOf(competition, heat) === currentIndex)
       : undefined;
-  // Only a confirmed heat means you're dancing; a possible one is still waiting on a callback.
-  const dancingNow = onFloor && !onFloor.isPossible ? onFloor : undefined;
-  const waitingFor = onFloor?.isPossible ? onFloor : next?.isPossible ? next : undefined;
   const title = (heat: Heat) => heatTitle(competition, heat);
   const round = (heat: Heat) => heatRound(competition, heat);
   const partner = (entry: UpcomingHeat) => partnerName(partnerOf(entry.couple, dancer));
   const away = (heat: Heat) => heatsAway(competition, heat.id);
   const estimate = (heat: Heat) => estimatedMinutes(competition, heat.id);
+  const ifCalledBack = (entry: UpcomingHeat) => (entry.isPossible ? ' · if called back' : '');
 
-  if (dancingNow) {
+  if (onFloor) {
     return (
       <div class={cx(styles.me, styles.hot)}>
-        <div class="muted">{dancer}, you are</div>
+        <div class="muted">
+          {dancer}, {onFloor.isPossible ? 'if you were called back, you are' : 'you are'}
+        </div>
         <div class={styles.big}>On the floor now</div>
         <div class={styles.what}>
-          {title(dancingNow.heat)} · {round(dancingNow.heat)} with {partner(dancingNow)}
+          {title(onFloor.heat)} · {round(onFloor.heat)} with {partner(onFloor)}
         </div>
         {next && (
           <div class={cx('muted', styles.followUp)}>
             After this: {title(next.heat)} in {away(next.heat)} heats
-            {next.isPossible && ' (if called back)'}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (waitingFor) {
-    const nextSure = upcoming.find((entry) => !entry.isPossible && isAhead(entry));
-    const waitingAway = away(waitingFor.heat);
-    return (
-      <div class={styles.me} aria-live="polite">
-        <div class="muted">{dancer}, waiting on a callback</div>
-        <div class={styles.big}>{title(waitingFor.heat)}</div>
-        <div class={styles.what}>
-          {waitingFor === onFloor
-            ? `On the floor now, if you were called back: ${round(waitingFor.heat)} with ${partner(waitingFor)}`
-            : `If you're called back: ${round(waitingFor.heat)} with ${partner(waitingFor)}, heat `}
-          {waitingFor !== onFloor && (
-            <>
-              <span class="mono">{waitingFor.heat.eventNumber}</span>
-              {waitingAway !== null && `, ${waitingAway} heats away`}
-            </>
-          )}
-        </div>
-        {nextSure && (
-          <div class={cx('muted', styles.followUp)}>
-            Next for sure: {title(nextSure.heat)} · {round(nextSure.heat)}
-            {away(nextSure.heat) !== null
-              ? ` in ${away(nextSure.heat)} heats`
-              : ` at ${formatClockTime(estimate(nextSure.heat))}`}
+            {ifCalledBack(next)}
           </div>
         )}
       </div>
@@ -146,6 +115,7 @@ function MyNextHeat() {
         <div class={styles.big}>{headline}</div>
         <div class={styles.what}>
           {title(next.heat)} · {round(next.heat)} with {partner(next)}
+          {ifCalledBack(next)}
         </div>
         <div class={cx('muted', styles.meta)}>
           Heat <span class="mono">{next.heat.eventNumber}</span> · about{' '}
@@ -167,17 +137,10 @@ function MyNextHeat() {
 
 function TeamUpNext() {
   const { store } = useApp();
-  const heats = teamUpcomingHeats(
-    store.competition.value,
-    TEAM_UP_NEXT_COUNT,
-    store.preferences.value.showPossibleHeats,
-  );
+  const heats = teamUpcomingHeats(store.competition.value, TEAM_UP_NEXT_COUNT);
   return (
     <>
-      <div class={cx('row', styles.sectionHeader)}>
-        <h2>Team up next</h2>
-        <PossibleHeatsToggle label="Possible callbacks" />
-      </div>
+      <h2>Team up next</h2>
       {heats.length ? (
         <div class="list">
           {heats.map((heat) => (

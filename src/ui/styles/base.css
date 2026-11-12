@@ -227,21 +227,6 @@ label.field {
   background: var(--accent);
   color: var(--accent-ink);
 }
-.chip.out {
-  text-decoration: line-through;
-  opacity: 0.6;
-}
-.chip.maybe {
-  background: transparent;
-  border: 1.5px dashed color-mix(in srgb, var(--muted) 70%, transparent);
-  color: var(--muted);
-  padding: 2px 7px;
-}
-.chip.me.maybe {
-  background: transparent;
-  border-color: var(--accent);
-  color: var(--accent);
-}
 
 /* Heat lists */
 .list {

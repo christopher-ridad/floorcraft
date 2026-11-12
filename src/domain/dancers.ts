@@ -18,7 +18,7 @@ export interface UpcomingHeat {
   isPossible: boolean;
 }
 
-/** The dancer's heats from the one on the floor onward, confirmed or possible. */
+/** The dancer's heats from the one on the floor onward, including rounds that need a callback. */
 export function upcomingHeatsFor(competition: Competition, dancer: string): UpcomingHeat[] {
   const fromIndex = Math.max(competition.currentIndex, 0);
   const upcoming: UpcomingHeat[] = [];
@@ -26,23 +26,14 @@ export function upcomingHeatsFor(competition: Competition, dancer: string): Upco
     if (item.kind !== 'heat' || index < fromIndex) return;
     const team = competition.heatTeams.get(item.id);
     if (!team) return;
-    const confirmed = team.dancing.find((couple) => isInCouple(couple, dancer));
-    if (confirmed) {
-      upcoming.push({ heat: item, couple: confirmed, isPossible: false });
-      return;
-    }
-    const possible = team.possible.find((couple) => isInCouple(couple, dancer));
-    if (possible) upcoming.push({ heat: item, couple: possible, isPossible: true });
+    const couple = team.couples.find((candidate) => isInCouple(candidate, dancer));
+    if (couple) upcoming.push({ heat: item, couple, isPossible: team.ifCalledBack });
   });
   return upcoming;
 }
 
 /** The next `limit` heats after the one on the floor that have anyone from the team in them. */
-export function teamUpcomingHeats(
-  competition: Competition,
-  limit: number,
-  includePossible: boolean,
-): Heat[] {
+export function teamUpcomingHeats(competition: Competition, limit: number): Heat[] {
   const heats: Heat[] = [];
   const items = competition.schedule;
   for (let i = Math.max(competition.currentIndex + 1, 0); i < items.length; i++) {
@@ -50,9 +41,7 @@ export function teamUpcomingHeats(
     const item = items[i];
     if (item?.kind !== 'heat') continue;
     const team = competition.heatTeams.get(item.id);
-    if (team && (team.dancing.length || (includePossible && team.possible.length))) {
-      heats.push(item);
-    }
+    if (team?.couples.length) heats.push(item);
   }
   return heats;
 }

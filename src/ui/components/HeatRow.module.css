@@ -80,33 +80,7 @@
   color: var(--accent);
 }
 
-/* Tentative: only happens with a callback. Hatched, dashed lane, quieter type. */
-.tentative {
-  background: repeating-linear-gradient(
-    135deg,
-    transparent 0 7px,
-    color-mix(in srgb, var(--line) 55%, transparent) 7px 8px
-  );
-}
-.tentative::before {
-  background: none;
-  border-left: 3px dashed var(--lane);
-  width: 0;
-}
-.tentative .title {
-  font-weight: 500;
-  color: var(--muted);
-}
-.tentative .time {
-  color: var(--muted);
-  font-weight: 500;
-}
-.tentative :global(.evno) {
-  border-style: dashed;
-}
-
-.ifCalledBack,
-.calledBack {
+.ifCalledBack {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -114,14 +88,8 @@
   border-radius: 999px;
   padding: 1px 7px;
   white-space: nowrap;
-}
-.ifCalledBack {
   color: var(--muted);
   border: 1.5px dashed var(--muted);
-}
-.calledBack {
-  color: var(--good);
-  border: 1.5px solid var(--good);
 }
 
 .break {

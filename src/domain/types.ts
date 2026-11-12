@@ -89,27 +89,12 @@ export interface Schedule {
 /** The events each couple is entered in: couple (partnership) id → event ids. */
 export type Entries = Readonly<Record<string, readonly string[]>>;
 
-/** How far a couple has got in one event. */
-export interface CallbackMark {
-  /** The latest round the couple is confirmed to dance. */
-  reachedRound: Round;
-  /** True once the couple was not called back after `reachedRound`. */
-  eliminated: boolean;
-}
-
-/** Callback marks keyed by `callbackKey(coupleId, eventId)`. */
-export type CallbackMarks = Readonly<Record<string, CallbackMark>>;
-
 /** Where the floor is. */
 export interface FloorState {
   /** The schedule item on the floor, or null before the competition starts. */
   currentItemId: string | null;
   /** When the current item was put on the floor (epoch ms). Drives the pace estimate. */
   currentSetAt: number | null;
-}
-
-export interface LiveState extends FloorState {
-  callbacks: CallbackMarks;
 }
 
 export type IdFactory = () => string;

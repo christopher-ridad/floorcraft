@@ -27,7 +27,7 @@ describe('the built-in team', () => {
     const chrisHeats = competition.schedule.filter(
       (item) =>
         item.kind === 'heat' &&
-        competition.heatTeams.get(item.id)?.dancing.some((couple) => isInCouple(couple, 'Chris')),
+        competition.heatTeams.get(item.id)?.couples.some((couple) => isInCouple(couple, 'Chris')),
     );
     expect(chrisHeats.map(describeItem)).toContain('8:07 AM [1]');
   });

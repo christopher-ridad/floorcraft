@@ -1,11 +1,5 @@
 import { deriveCompetition, type Competition } from '../../src/domain/competition';
-import type {
-  CallbackMarks,
-  Couple,
-  Entries,
-  EventDetails,
-  ScheduleItem,
-} from '../../src/domain/types';
+import type { Couple, Entries, EventDetails, ScheduleItem } from '../../src/domain/types';
 
 /**
  * A small competition: three events (e1 with a first round, semi and final; e2 single-round;
@@ -78,7 +72,6 @@ export const at = (hours: number, minutes: number) =>
 export interface Setup {
   currentItemId?: string;
   currentSetAt?: number;
-  callbacks?: CallbackMarks;
   entries?: Entries;
   date?: string;
 }
@@ -93,7 +86,6 @@ export function competitionWith(setup: Setup = {}): Competition {
     live: {
       currentItemId: setup.currentItemId ?? null,
       currentSetAt: setup.currentSetAt ?? null,
-      callbacks: setup.callbacks ?? {},
     },
   });
 }

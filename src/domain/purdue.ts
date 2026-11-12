@@ -288,7 +288,7 @@ export function purdueCompetition(now: number): Competition {
     events: schedule.events,
     couples,
     entries,
-    live: { currentItemId: current?.id ?? null, currentSetAt: null, callbacks: {} },
+    live: { currentItemId: current?.id ?? null, currentSetAt: null },
     date: PURDUE_CLASSIC.date,
   });
 }

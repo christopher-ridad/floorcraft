@@ -10,7 +10,7 @@ function withDefaults(stored: Record<string, unknown>): Preferences {
     typeof stored[key] === typeof DEFAULT_PREFERENCES[key]
       ? (stored[key] as Preferences[Key])
       : DEFAULT_PREFERENCES[key];
-  return { dancer: pick('dancer'), showPossibleHeats: pick('showPossibleHeats') };
+  return { dancer: pick('dancer') };
 }
 
 /** This device's settings, in browser storage. */

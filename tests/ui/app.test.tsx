@@ -32,7 +32,7 @@ function renderApp({ tab = 'now', now = BEFORE, preferences = {} }: Options = {}
   // Only the clock is faked; timers run normally.
   vi.useFakeTimers({ toFake: ['Date'], now });
   const storage = memoryStorage({ 'floorcraft:tab': tab });
-  preferencesStorage(storage).save({ dancer: '', showPossibleHeats: true, ...preferences });
+  preferencesStorage(storage).save({ dancer: '', ...preferences });
   const store = createAppStore({
     preferences: preferencesStorage(storage),
     clock: { now: () => Date.now() },
@@ -71,10 +71,12 @@ describe('Now tab', () => {
     expect(screen.getByText('On the floor now')).toBeTruthy();
   });
 
-  it('marks a heat that depends on a callback', () => {
+  it('says a later round on the floor needs a callback', () => {
     // Chris's 1st rounds are done, and the 2nd round (8:29) depends on a callback.
     renderApp({ now: ON_THE_DAY(8, 30), preferences: { dancer: 'Chris' } });
-    expect(screen.getByText('Chris, waiting on a callback')).toBeTruthy();
+    expect(screen.getByText('Chris, if you were called back, you are')).toBeTruthy();
+    expect(screen.getByText('On the floor now')).toBeTruthy();
+    expect(screen.getByText(/After this: .* · if called back/)).toBeTruthy();
   });
 });
 
@@ -93,11 +95,12 @@ describe('Schedule tab', () => {
     expect(screen.getByText('Latin Awards')).toBeTruthy();
   });
 
-  it('hides heats that depend on a callback when asked', async () => {
+  it('marks later rounds, which need a callback', async () => {
     const { user } = renderApp({ tab: 'schedule', preferences: { dancer: 'Nathanio' } });
     await user.click(screen.getByRole('button', { name: 'My Schedule' }));
-    await user.click(screen.getByRole('switch', { name: 'Show possible callbacks' }));
-    expect(document.querySelectorAll('[data-heat-row]')).toHaveLength(1);
+    // Four rounds: the first is sure, the other three need a callback.
+    expect(screen.getAllByText('If called back')).toHaveLength(3);
+    expect(screen.queryByRole('switch')).toBeNull();
   });
 });
 

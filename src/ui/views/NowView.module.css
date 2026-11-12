@@ -31,11 +31,3 @@
 .meta {
   margin-top: 4px;
 }
-
-.sectionHeader {
-  justify-content: space-between;
-  margin-top: 6px;
-}
-.sectionHeader h2 {
-  margin: 0;
-}

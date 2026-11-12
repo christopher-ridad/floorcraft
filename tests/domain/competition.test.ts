@@ -11,12 +11,7 @@ import { at, competitionWith, ids, schedule } from './fixture';
 const teamIn = (competition: Competition, heatId: string) => {
   const team = competition.heatTeams.get(heatId);
   if (!team) throw new Error(`No team for ${heatId}`);
-  return {
-    dancing: ids(team.dancing),
-    possible: ids(team.possible),
-    eliminated: ids(team.eliminated),
-    firstRound: team.firstRound,
-  };
+  return { couples: ids(team.couples), ifCalledBack: team.ifCalledBack };
 };
 
 describe('entries and the team roster', () => {
@@ -31,8 +26,8 @@ describe('entries and the team roster', () => {
 
   it('puts an entered couple in every heat of the event', () => {
     const competition = competitionWith({ entries: { c2: ['e3'], c4: ['e3'] } });
-    expect(teamIn(competition, 'h4')).toMatchObject({ dancing: ['c2', 'c4'] });
-    expect(teamIn(competition, 'h6')).toMatchObject({ possible: ['c2', 'c4'] });
+    expect(teamIn(competition, 'h4')).toEqual({ couples: ['c2', 'c4'], ifCalledBack: false });
+    expect(teamIn(competition, 'h6')).toEqual({ couples: ['c2', 'c4'], ifCalledBack: true });
     expect(competition.missingEntries).toEqual([]);
   });
 
@@ -48,35 +43,13 @@ describe('entries and the team roster', () => {
   });
 });
 
-describe('callback states', () => {
-  it('puts everyone in first rounds and single-round events, and later rounds as possible', () => {
+describe('rounds', () => {
+  it('marks first rounds and single-round events as sure, and later rounds as if called back', () => {
     const competition = competitionWith();
-    const none = { possible: [], eliminated: [] };
-    expect(teamIn(competition, 'h1')).toEqual({ dancing: ['c1', 'c3'], ...none, firstRound: 1 });
-    expect(teamIn(competition, 'h2')).toEqual({ dancing: ['c1'], ...none, firstRound: 5 });
-    expect(teamIn(competition, 'h3')).toEqual({
-      dancing: [],
-      possible: ['c1', 'c3'],
-      eliminated: [],
-      firstRound: 1,
-    });
-    expect(teamIn(competition, 'h5')).toMatchObject({ dancing: [], possible: ['c1', 'c3'] });
-  });
-
-  it('a callback mark confirms that round only; later rounds stay possible', () => {
-    const competition = competitionWith({
-      callbacks: { c1_e1: { reachedRound: 4, eliminated: false } },
-    });
-    expect(teamIn(competition, 'h3')).toMatchObject({ dancing: ['c1'], possible: ['c3'] });
-    expect(teamIn(competition, 'h5')).toMatchObject({ dancing: [], possible: ['c1', 'c3'] });
-  });
-
-  it('not being called back removes the couple from every later round', () => {
-    const competition = competitionWith({
-      callbacks: { c3_e1: { reachedRound: 1, eliminated: true } },
-    });
-    expect(teamIn(competition, 'h3')).toMatchObject({ possible: ['c1'], eliminated: ['c3'] });
-    expect(teamIn(competition, 'h5')).toMatchObject({ possible: ['c1'], eliminated: ['c3'] });
+    expect(teamIn(competition, 'h1')).toEqual({ couples: ['c1', 'c3'], ifCalledBack: false });
+    expect(teamIn(competition, 'h2')).toEqual({ couples: ['c1'], ifCalledBack: false });
+    expect(teamIn(competition, 'h3')).toEqual({ couples: ['c1', 'c3'], ifCalledBack: true });
+    expect(teamIn(competition, 'h5')).toEqual({ couples: ['c1', 'c3'], ifCalledBack: true });
   });
 });
 

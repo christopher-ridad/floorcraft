@@ -1,6 +1,5 @@
 import type { JSX } from 'preact';
 import type { AppStore } from '../app/store';
-import { localDate } from '../domain/clock';
 import { PURDUE_CLASSIC } from '../domain/purdue';
 import { AppContext, useApp } from './context';
 import type { Tab, ViewState } from './viewState';
@@ -49,16 +48,7 @@ const competitionDay = new Date(`${PURDUE_CLASSIC.date}T12:00:00`).toLocaleDateS
   day: 'numeric',
 });
 
-/** Whether the competition is on, by the date and the posted times. */
-function statusText(store: AppStore): string {
-  const today = localDate(Date.now());
-  if (today < PURDUE_CLASSIC.date) return competitionDay;
-  if (today > PURDUE_CLASSIC.date) return 'Finished';
-  return store.competition.value.currentIndex >= 0 ? 'Today · by the posted times' : 'Today';
-}
-
 function TopBar() {
-  const { store } = useApp();
   return (
     <header class={styles.top}>
       <div class={styles.brand}>
@@ -67,7 +57,7 @@ function TopBar() {
       </div>
       <TabBar />
       <div class={styles.spacer} />
-      <span class={styles.pace}>{statusText(store)}</span>
+      <span class={styles.pace}>{competitionDay}</span>
     </header>
   );
 }

@@ -7,9 +7,7 @@ import {
   type UpcomingHeat,
 } from '../../domain/dancers';
 import { estimatedMinutes, heatsAway } from '../../domain/pace';
-import { PURDUE_CLASSIC } from '../../domain/purdue';
 import type { Heat } from '../../domain/types';
-import { hasTeam, TeamChips } from '../components/CoupleChip';
 import { HeatRow } from '../components/HeatRow';
 import { PossibleHeatsToggle } from '../components/PossibleHeats';
 import { DancerPicker } from '../components/DancerPicker';
@@ -26,7 +24,6 @@ export function NowView() {
   return (
     <>
       {store.preferences.value.dancer ? <MyNextHeat /> : <WhoAreYou />}
-      <HappeningNow />
       <TeamUpNext />
     </>
   );
@@ -165,68 +162,6 @@ function MyNextHeat() {
       <div class={styles.big}>No more heats</div>
       <div class={styles.what}>Nothing left on your card. Cheer on the team.</div>
     </div>
-  );
-}
-
-/** What the posted times say is on the floor now. */
-function HappeningNow() {
-  const { store } = useApp();
-  const competition = store.competition.value;
-  const current = competition.schedule[competition.currentIndex];
-  const first = competition.schedule[0];
-
-  if (!current) {
-    return (
-      <section class={cx(styles.floor, 'lane-other')}>
-        <div class={styles.label}>Not started</div>
-        <div class={styles.name}>
-          {PURDUE_CLASSIC.name}
-          {first && ` starts at ${first.scheduledTime}`}
-        </div>
-        <div class="muted">
-          On competition day this shows what's on the floor by the posted times.
-        </div>
-      </section>
-    );
-  }
-
-  const info = competition.items.get(current.id);
-  const team = competition.heatTeams.get(current.id);
-  return (
-    <section class={cx(styles.floor, `lane-${info?.heatName?.style ?? 'other'}`)}>
-      <div class={styles.label}>
-        <span class={styles.dot} />
-        Happening now, by the schedule
-        {current.kind === 'heat' && (
-          <>
-            {' '}
-            · Heat <span class="mono">{current.eventNumber}</span>
-          </>
-        )}
-      </div>
-      <div class={styles.name}>
-        {current.kind === 'heat' ? heatTitle(competition, current) : current.label}
-      </div>
-      {current.kind === 'heat' && info?.heatName && (
-        <div class={cx('row', styles.floorDetails)}>
-          <span class="round">{roundLabel(info.heatName)}</span>
-          {info.heatName.dances && <span class="dances">{info.heatName.dances}</span>}
-          <span class={cx('muted', styles.scheduled)}>
-            scheduled {formatClockTime(info.scheduledMinutes)}
-          </span>
-        </div>
-      )}
-      {team && hasTeam(team) ? (
-        <div class={styles.floorChips}>
-          <TeamChips team={team} />
-        </div>
-      ) : (
-        current.kind === 'heat' && (
-          <div class={cx('muted', styles.nobody)}>No one from the team in this heat.</div>
-        )
-      )}
-      <div class="muted">The floor often runs a little behind the posted times.</div>
-    </section>
   );
 }
 

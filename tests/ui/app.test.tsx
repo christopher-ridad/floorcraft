@@ -56,7 +56,7 @@ describe('the site', () => {
 describe('Now tab', () => {
   it('before the day: asks who you are, then shows your first heat', async () => {
     const { user } = renderApp();
-    expect(screen.getByText('Not started')).toBeTruthy();
+    expect(screen.queryByText(/not started|happening now/i)).toBeNull();
 
     await user.selectOptions(screen.getByLabelText(/Who are you\?/), 'Chris');
 
@@ -67,11 +67,8 @@ describe('Now tab', () => {
 
   it('on the day: follows the posted times', () => {
     renderApp({ now: ON_THE_DAY(8, 20), preferences: { dancer: 'Chris' } });
-
-    expect(screen.getByText(/Happening now, by the schedule/)).toBeTruthy();
     expect(screen.getByText('Chris, you are')).toBeTruthy();
     expect(screen.getByText('On the floor now')).toBeTruthy();
-    expect(screen.getByText('Today · by the posted times')).toBeTruthy();
   });
 
   it('marks a heat that depends on a callback', () => {

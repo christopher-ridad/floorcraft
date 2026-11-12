@@ -37,7 +37,7 @@ export function tokenizeEventName(name: string): EventNameTokens {
     .replace(/\bv\.?\s*waltz\b/g, ' vwaltz ')
     .replace(/\bviennese waltz\b/g, ' vwaltz ')
     .replace(/\bpre-champ\b/g, 'prechamp')
-    .replace(/\b(1st round|second round|2nd round|quarter|semi-final|final)\b/g, ' ')
+    .replace(/\b(1st round|second round|2nd round|quarter|semi-final|semi|final)\b/g, ' ')
     .replace(/[^a-z0-9 ]/g, ' ');
 
   const words = text.split(/\s+/).filter(Boolean);

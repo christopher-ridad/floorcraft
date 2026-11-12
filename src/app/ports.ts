@@ -138,6 +138,33 @@ export interface AccessRepository {
   setProvider(uid: string, provider: SignInProvider): Promise<void>;
   /** Replaces the join code. Members who already joined stay; the old link stops working. */
   setJoinCode(joinCode: string): Promise<void>;
+  /**
+   * Frees a dancer's name so another phone can pick it (e.g. the same person on their Home Screen
+   * app). Captains only.
+   */
+  releaseDancer(dancerId: string, holderUid: string): Promise<void>;
+  /** Stores where to send this phone's notifications. */
+  savePushToken(uid: string, token: string): Promise<void>;
+}
+
+/**
+ * Whether this phone can get notifications while the app is closed:
+ * - `unavailable`: this browser can't (or this is a test build).
+ * - `install-first`: an iPhone or iPad; the app must be added to the Home Screen first.
+ * - `off`: possible; not asked yet.
+ * - `blocked`: the person said no; only the phone's settings can change that.
+ * - `on`: allowed.
+ */
+export type PushStatus = 'unavailable' | 'install-first' | 'off' | 'blocked' | 'on';
+
+/** Notifications that reach the phone while the app is closed. */
+export interface PushNotifications {
+  status(): PushStatus;
+  /**
+   * Asks to allow notifications if needed, and returns this phone's push token. Must start from
+   * a tap. Rejects if refused or unsupported.
+   */
+  getToken(): Promise<string>;
 }
 
 export interface PreferencesStore {

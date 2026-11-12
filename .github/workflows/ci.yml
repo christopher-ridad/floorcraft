@@ -14,7 +14,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
       - run: npm ci
+      # The Cloud Functions' own packages, for typechecking functions/src.
+      - run: npm ci --prefix functions
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck

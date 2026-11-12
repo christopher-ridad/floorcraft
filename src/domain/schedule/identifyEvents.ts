@@ -25,9 +25,9 @@ export const toScheduleLines = (items: Schedule['items']): ScheduleLine[] =>
  * Works out each event on a schedule and gives every heat its event's id.
  *
  * Events keep the id they had in `previousEvents` so a couple's entries and callbacks stay
- * attached when an updated schedule is pasted. An event matches, in order of preference, one
+ * attached when the schedule is replaced or edited. An event matches, in order of preference, one
  * with the same number and name, then one with the same name (it was renumbered), then one with
- * the same number (its name was corrected). Anything else gets a new id.
+ * the same number, level and style (its name was corrected). Anything else gets a new id.
  */
 export function identifyEvents(
   lines: readonly ScheduleLine[],
@@ -71,23 +71,17 @@ export function identifyEvents(
     (previous, event) => previous.eventNumber === event.eventNumber && sameName(previous, event),
   );
   claimMatches(sameName);
-  claimMatches((previous, event) => previous.eventNumber === event.eventNumber);
+  claimMatches(
+    (previous, event) =>
+      previous.eventNumber === event.eventNumber &&
+      previous.level === event.level &&
+      previous.style === event.style,
+  );
 
-  const events: EventDetails[] = details.map((event) => {
-    const previous = matches.get(event.eventNumber);
-    const isUnchanged =
-      !!previous &&
-      previous.name === event.name &&
-      previous.style === event.style &&
-      previous.dances === event.dances &&
-      previous.level === event.level;
-    return {
-      ...event,
-      eventId: previous?.eventId ?? createId(),
-      // A reviewed event stays reviewed only if nothing about it changed.
-      confirmed: isUnchanged && previous.confirmed,
-    };
-  });
+  const events: EventDetails[] = details.map((event) => ({
+    ...event,
+    eventId: matches.get(event.eventNumber)?.eventId ?? createId(),
+  }));
 
   const idByNumber = new Map(events.map((event) => [event.eventNumber, event.eventId]));
   const items = lines.map((line) =>

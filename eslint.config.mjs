@@ -16,7 +16,17 @@ function layerRule(files, forbidden) {
 }
 
 export default tseslint.config(
-  { ignores: ['node_modules', 'dist', 'coverage', 'test-results', 'playwright-report'] },
+  {
+    ignores: [
+      'node_modules',
+      'functions/node_modules',
+      'functions/lib',
+      'dist',
+      'coverage',
+      'test-results',
+      'playwright-report',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.strict,
   // Layers depend inward only: ui → app → domain, and infra implements app's ports.
@@ -37,5 +47,7 @@ export default tseslint.config(
   ]),
   layerRule('src/infra/**/*.ts', ['**/ui/**', 'preact', 'preact/*', '@preact/*']),
   layerRule('src/ui/**/*.{ts,tsx}', ['**/infra/**']),
+  // The service worker runs outside the page, with its own globals.
+  { files: ['public/sw.js'], languageOptions: { globals: { self: 'readonly' } } },
   prettier,
 );

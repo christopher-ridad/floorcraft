@@ -1,18 +1,18 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { formatClockTime, parseClockTime } from '../../src/domain/clock';
 import { matchEntry } from '../../src/domain/entries/matchEntry';
 import { parsePartnershipRows } from '../../src/domain/entries/parsePartnershipRows';
+import {
+  isOfficialSchedule,
+  OFFICIAL_PARTNERSHIPS_TEXT,
+  officialSchedule,
+} from '../../src/domain/purdue';
 import { classifyDanceStyle } from '../../src/domain/schedule/danceStyle';
 import { buildEventCatalog } from '../../src/domain/schedule/eventCatalog';
 import { parseHeatName } from '../../src/domain/schedule/heatName';
 import { parseSchedule } from '../../src/domain/schedule/parseSchedule';
-import type { Schedule, ScheduleItem } from '../../src/domain/types';
+import type { Schedule } from '../../src/domain/types';
 
-const readData = (file: string) =>
-  readFileSync(new URL(`../../data/${file}`, import.meta.url), 'utf8');
-const sampleSchedule = readData('schedule-2025-tentative.txt');
-const samplePartnerships = readData('partnerships-2026.txt');
 const sequentialIds = () => {
   let next = 0;
   return () => `id${++next}`;
@@ -48,6 +48,16 @@ describe('heat names', () => {
     });
   });
 
+  it.each([
+    ['Bronze Amer. Smooth 2nd Round (WT)', 2],
+    ['Gold Amer. Smooth Semi (WTFV)', 4],
+    ['Newcomer Amer. Waltz Semi', 4],
+    ['Novice Amer. Smooth Final (WTF)', 5],
+  ])('reads the round of %s as %i', (name, round) => {
+    expect(parseHeatName(name)).toMatchObject({ round, isSingleRound: false });
+    expect(parseHeatName(name).baseName).not.toMatch(/semi|round|final/i);
+  });
+
   it('treats a name with no round as a single-round final', () => {
     expect(parseHeatName('Pre-Champ Amer. Smooth (WTFV)')).toMatchObject({
       round: 5,
@@ -67,26 +77,59 @@ describe('heat names', () => {
   });
 });
 
-describe('schedule parsing', () => {
-  it('parses every heat and break from the sample schedule', () => {
-    const { items, events } = parseSchedule(sampleSchedule);
-    expect(items.filter((item) => item.kind === 'heat')).toHaveLength(139);
-    expect(items.some((item) => item.kind === 'break' && item.label === 'Smooth Awards')).toBe(
-      true,
+describe('the official schedule', () => {
+  it('has every heat, break and event', () => {
+    const { items, events } = officialSchedule();
+    expect(items.filter((item) => item.kind === 'heat')).toHaveLength(145);
+    expect(items.filter((item) => item.kind === 'break').map((item) => item.scheduledTime)).toEqual(
+      ['8:00 AM', '10:42 AM', '10:57 AM', '1:39 PM', '1:54 PM', '4:37 PM', '4:52 PM', '7:33 PM'],
     );
-    expect(events).toHaveLength(new Set(items.flatMap(eventNumberOf)).size);
+    expect(events.map((event) => event.eventNumber)).toEqual(
+      Array.from({ length: 44 }, (_, i) => i + 1),
+    );
+    expect(events.every((event) => event.style !== 'other' && event.level)).toBe(true);
   });
 
-  it('reads heats, breaks and several items on one line, and identifies the events', () => {
-    const text =
-      '8:30 AM Smooth Events 8:37 am [1] Bronze Amer. Smooth 1st Round (WT)\nno time here';
+  it('is in time order', () => {
+    const minutes = officialSchedule().items.map((item) => parseClockTime(item.scheduledTime));
+    expect(minutes.every((value, i) => value !== null && value >= (minutes[i - 1] ?? 0))).toBe(
+      true,
+    );
+  });
+
+  it('only gives the pre-champ and championship events a single round', () => {
+    const singles = officialSchedule().items.flatMap((item) =>
+      item.kind === 'heat' && parseHeatName(item.name).isSingleRound ? [item.eventNumber] : [],
+    );
+    expect(singles).toEqual([10, 20, 22, 33, 44]);
+  });
+
+  it('recognizes itself, and not an edited copy', () => {
+    const { items } = officialSchedule();
+    expect(isOfficialSchedule(items)).toBe(true);
+    expect(isOfficialSchedule(items.slice(1))).toBe(false);
+    expect(
+      isOfficialSchedule(
+        items.map((item, i) => (i ? item : { ...item, scheduledTime: '7:55 AM' })),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('schedule parsing', () => {
+  it('reads heats and breaks, ignores lines without a time, and identifies the events', () => {
+    const text = [
+      '8:00 AM Smooth Events',
+      '8:07 am [1] Bronze Amer. Smooth 1st Round (WT)',
+      'no time here',
+    ].join('\n');
     expect(parseSchedule(text, { createId: sequentialIds() })).toEqual({
       items: [
-        { kind: 'break', id: 'id1', scheduledTime: '8:30 AM', label: 'Smooth Events' },
+        { kind: 'break', id: 'id1', scheduledTime: '8:00 AM', label: 'Smooth Events' },
         {
           kind: 'heat',
           id: 'id2',
-          scheduledTime: '8:37 AM',
+          scheduledTime: '8:07 AM',
           eventId: 'id3',
           eventNumber: 1,
           name: 'Bronze Amer. Smooth 1st Round (WT)',
@@ -100,22 +143,9 @@ describe('schedule parsing', () => {
           level: 'bronze',
           style: 'smooth',
           dances: 'WT',
-          confirmed: false,
         },
       ],
     });
-  });
-
-  it('restores time order for text pasted from a two-column PDF', () => {
-    const lines = sampleSchedule.trim().split('\n');
-    const half = Math.ceil(lines.length / 2);
-    const interleaved = lines.slice(0, half).map((line, i) => `${line} ${lines[half + i] ?? ''}`);
-    const heatKeys = (text: string) =>
-      parseSchedule(text).items.flatMap((item) =>
-        item.kind === 'heat' ? [`${item.scheduledTime}${item.eventNumber}`] : [],
-      );
-
-    expect(heatKeys(interleaved.join('\n'))).toEqual(heatKeys(lines.join('\n')));
   });
 });
 
@@ -128,7 +158,6 @@ describe('event identity across schedule updates', () => {
       '9:30 AM [1] Bronze Amer. Smooth Final (WT)',
     ].join('\n'),
   );
-  const reviewedEvents = original.events.map((event) => ({ ...event, confirmed: true }));
   const idOf = (schedule: Schedule, eventNumber: number) =>
     schedule.events.find((event) => event.eventNumber === eventNumber)?.eventId;
 
@@ -139,12 +168,11 @@ describe('event identity across schedule updates', () => {
     expect(ids).toEqual([idOf(original, 1), idOf(original, 1)]);
   });
 
-  it('keeps ids, and the review, for events that are unchanged', () => {
+  it('keeps ids for events that are unchanged', () => {
     const updated = parseSchedule('9:05 AM [1] Bronze Amer. Smooth 1st Round (WT)', {
-      previousEvents: reviewedEvents,
+      previousEvents: original.events,
     });
     expect(idOf(updated, 1)).toBe(idOf(original, 1));
-    expect(updated.events[0]?.confirmed).toBe(true);
   });
 
   it('follows an event that was renumbered', () => {
@@ -156,12 +184,19 @@ describe('event identity across schedule updates', () => {
     expect(idOf(updated, 2)).toBe(idOf(original, 3));
   });
 
-  it('keeps the id when a name is corrected, but asks for a new review', () => {
+  it('keeps the id when a name is corrected', () => {
     const updated = parseSchedule('9:10 AM [2] Silver Intl. Standard (WTQ)', {
-      previousEvents: reviewedEvents,
+      previousEvents: original.events,
     });
     expect(idOf(updated, 2)).toBe(idOf(original, 2));
-    expect(updated.events[0]).toMatchObject({ dances: 'WTQ', confirmed: false });
+    expect(updated.events[0]).toMatchObject({ dances: 'WTQ' });
+  });
+
+  it('does not take over a different event that only shares the number', () => {
+    const updated = parseSchedule('9:10 AM [2] Newcomer Amer. Waltz', {
+      previousEvents: original.events,
+    });
+    expect(original.events.map((event) => event.eventId)).not.toContain(idOf(updated, 2));
   });
 
   it('gives new events new ids', () => {
@@ -192,10 +227,10 @@ describe('partnership rows', () => {
     ]);
   });
 
-  it('matches every sample entry to a scheduled event', () => {
-    const events = buildEventCatalog(parseSchedule(sampleSchedule).events);
-    const rows = parsePartnershipRows(samplePartnerships);
-    expect(rows).toHaveLength(20);
+  it('matches every built-in entry to a scheduled event', () => {
+    const events = buildEventCatalog(officialSchedule().events);
+    const rows = parsePartnershipRows(OFFICIAL_PARTNERSHIPS_TEXT);
+    expect(rows).toHaveLength(21);
 
     const misses = rows.flatMap((row) =>
       row.entries
@@ -206,15 +241,12 @@ describe('partnership rows', () => {
   });
 
   it('handles shorthand: dance order, missing style, V. Waltz', () => {
-    const events = buildEventCatalog(parseSchedule(sampleSchedule).events);
+    const events = buildEventCatalog(officialSchedule().events);
     const numberOf = (entry: string) => events.get(matchEntry(entry, events) ?? '')?.eventNumber;
-    expect(numberOf('Silver I. Standard (TF)')).toBe(16); // schedule lists (FT)
-    expect(numberOf('Newcomer Swing')).toBe(29);
-    expect(numberOf('Silver I. V. Waltz')).toBe(20);
-    expect(numberOf('Gold I. Latin (SCRJ)')).toBe(37);
+    expect(numberOf('Silver I. Standard (TF)')).toBe(18); // schedule lists (FT)
+    expect(numberOf('Newcomer Swing')).toBe(28);
+    expect(numberOf('Silver I. V. Waltz')).toBe(19);
+    expect(numberOf('Gold I. Latin (SCRJ)')).toBe(36);
+    expect(numberOf('Syllabus Paso Doble')).toBe(42);
   });
 });
-
-function eventNumberOf(item: ScheduleItem): number[] {
-  return item.kind === 'heat' ? [item.eventNumber] : [];
-}

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { InvalidBackup, readBackup } from '../../src/app/backup';
 import type { CompetitionSnapshot, TeamSnapshot } from '../../src/app/ports';
+import { officialSchedule } from '../../src/domain/purdue';
 import { preferencesStorage } from '../../src/infra/platform/preferencesStorage';
 import { backupFromLegacy } from '../../src/infra/legacy/legacyBackup';
 import { localRepository } from '../../src/infra/local/localRepository';
@@ -109,7 +110,6 @@ describe('backups', () => {
 describe('moving the original app’s data', () => {
   const { backup, unmatched } = backupFromLegacy(
     { schedule: legacyDocument('schedule'), entries: legacyDocument('entries') },
-    { name: 'Purdue Ballroom Classic', date: '2026-11-14', status: 'active' },
     sequentialIds(),
   );
   const [competition] = backup.competitions;
@@ -146,6 +146,26 @@ describe('moving the original app’s data', () => {
     expect(Object.values(competition?.entries ?? {}).flat()).toHaveLength(originalCount);
   });
 
+  it('keeps every entry attached when the official schedule replaces the old one', () => {
+    const old = competition?.schedule.events ?? [];
+    const official = officialSchedule({ previousEvents: old, createId: sequentialIds() });
+    const officialIds = new Set(official.events.map((event) => event.eventId));
+    const entries = Object.values(competition?.entries ?? {}).flat();
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.filter((eventId) => !officialIds.has(eventId))).toEqual([]);
+
+    // Renumbered events follow by name.
+    const numberNow = (oldNumber: number) => {
+      const eventId = old.find((event) => event.eventNumber === oldNumber)?.eventId;
+      return official.events.find((event) => event.eventId === eventId)?.eventNumber;
+    };
+    expect(numberNow(10)).toBe(9); // Novice Amer. Smooth
+    expect(numberNow(15)).toBe(17); // Silver Intl. Standard (WQ)
+    expect(numberNow(45)).toBe(43); // Novice Intl. Latin
+    // Events that aren't run this year are dropped, not given to another event.
+    expect(numberNow(11)).toBeUndefined(); // Championship Amer. Smooth
+  });
+
   it('starts with no floor position or callbacks', () => {
     expect(competition?.floor).toEqual({ currentItemId: null, currentSetAt: null });
     expect(competition?.callbacks).toEqual({});
@@ -167,7 +187,6 @@ describe('moving the original app’s data', () => {
           ],
         },
       },
-      { name: 'Test', date: '2026-01-01', status: 'active' },
       sequentialIds(),
     );
     expect(result.unmatched).toEqual([]);
@@ -190,7 +209,6 @@ describe('preferences storage', () => {
     });
     expect(preferencesStorage(storage).load()).toEqual({
       dancer: 'Chris',
-      alertThresholdHeats: 5,
       chime: false,
       vibrate: true,
       keepScreenAwake: true,
@@ -202,7 +220,7 @@ describe('preferences storage', () => {
   it('saves in the new format and ignores fields with the wrong type', () => {
     const storage = memoryStorage();
     const preferences = preferencesStorage(storage);
-    expect(preferences.load().alertThresholdHeats).toBe(3);
+    expect(preferences.load().chime).toBe(true);
 
     storage.set('floorcraft:preferences', JSON.stringify({ dancer: 7, chime: false }));
     expect(preferences.load()).toMatchObject({ dancer: '', chime: false });

@@ -3,7 +3,7 @@ import { DEFAULT_PREFERENCES, type Preferences } from '../../app/preferences';
 import { readJson, type KeyValueStorage } from '../storage/keyValueStorage';
 
 const KEY = 'floorcraft:preferences';
-/** The original app's key, with fields me, threshold, sound, vibrate, awake, showMaybe. */
+/** The original app's key, with fields me, threshold (ignored now), sound, vibrate, awake, showMaybe. */
 const LEGACY_KEY = 'hs:prefs';
 
 type StoredPreferences = { [Key in keyof Preferences]?: unknown };
@@ -11,7 +11,6 @@ type StoredPreferences = { [Key in keyof Preferences]?: unknown };
 function fromLegacy(legacy: Record<string, unknown>): StoredPreferences {
   return {
     dancer: legacy.me,
-    alertThresholdHeats: legacy.threshold,
     chime: legacy.sound,
     vibrate: legacy.vibrate,
     keepScreenAwake: legacy.awake,
@@ -27,7 +26,6 @@ function withDefaults(stored: StoredPreferences): Preferences {
       : DEFAULT_PREFERENCES[key];
   return {
     dancer: pick('dancer'),
-    alertThresholdHeats: pick('alertThresholdHeats'),
     chime: pick('chime'),
     vibrate: pick('vibrate'),
     keepScreenAwake: pick('keepScreenAwake'),

@@ -13,7 +13,8 @@ import { BACKUP_FORMAT, BACKUP_VERSION, type TeamBackup } from '../../app/backup
 import { buildEventCatalog } from '../../domain/schedule/eventCatalog';
 import { identifyEvents, type ScheduleLine } from '../../domain/schedule/identifyEvents';
 import { findPartnership, importPartnerships } from '../../domain/team';
-import type { CompetitionInfo, IdFactory } from '../../domain/types';
+import { PURDUE_CLASSIC } from '../../domain/purdue';
+import type { IdFactory } from '../../domain/types';
 
 type UnknownRecord = Record<string, unknown>;
 const isRecord = (value: unknown): value is UnknownRecord =>
@@ -50,9 +51,9 @@ function scheduleLines(document: unknown): ScheduleLine[] {
   });
 }
 
+/** Converts the documents into a backup of the Purdue Ballroom Classic, as the active competition. */
 export function backupFromLegacy(
   documents: LegacyDocuments,
-  competition: Omit<CompetitionInfo, 'id'>,
   createId: IdFactory,
 ): LegacyConversion {
   const schedule = identifyEvents(scheduleLines(documents.schedule), [], createId);
@@ -102,7 +103,7 @@ export function backupFromLegacy(
       partnerships: roster.partnerships,
       competitions: [
         {
-          info: { id: competitionId, ...competition },
+          info: { id: competitionId, ...PURDUE_CLASSIC, status: 'active' },
           schedule,
           entries: roster.entries,
           floor: { currentItemId: null, currentSetAt: null },

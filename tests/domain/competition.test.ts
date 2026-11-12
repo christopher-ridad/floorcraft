@@ -3,8 +3,9 @@
  * before the rewrite, so they pin down its behavior, quirks included.
  */
 import { describe, expect, it } from 'vitest';
-import { alertKey, nextAlert, type AlertPreferences } from '../../src/domain/alerts';
+import { alertKey, nextAlert, ON_DECK_MINUTES } from '../../src/domain/alerts';
 import { pendingCallbacks, recordCallback, type CallbackUpdate } from '../../src/domain/callbacks';
+import { minutesSinceMidnight } from '../../src/domain/clock';
 import type { Competition } from '../../src/domain/competition';
 import { upcomingHeatsFor } from '../../src/domain/dancers';
 import { advanceFloor, markOnFloor, moveFloorBack } from '../../src/domain/floor';
@@ -278,37 +279,55 @@ describe('a dancer’s upcoming heats', () => {
 });
 
 describe('alerts', () => {
+  /** The floor moves at 9:20, so a heat's estimate is its posted time minus the current one's. */
+  const now = at(9, 20);
+  const nowMinutes = minutesSinceMidnight(new Date(now));
+
   /** Puts each item on the floor in turn and returns the alert given at each step, as the app would. */
-  function alertsWhileMovingTo(itemIds: string[], preferences: AlertPreferences) {
+  function alertsWhileMovingTo(itemIds: string[], dancer: string) {
     const given = new Set<string>();
     let competition = competitionWith();
     return itemIds.map((itemId) => {
-      competition = withLive(competition, markOnFloor(competition.live, itemId, at(9, 20)));
-      const alert = nextAlert(competition, preferences, given);
+      competition = withLive(competition, markOnFloor(competition.live, itemId, now));
+      const alert = nextAlert(competition, { dancer, nowMinutes }, given);
       if (alert) given.add(alertKey(alert));
-      return alert && [alert.type, alert.heatId, alert.heatsAway];
+      return alert && [alert.type, alert.heatId, alert.heatsAway, alert.minutesAway];
     });
   }
 
   it('stay quiet before the competition starts', () => {
-    expect(
-      nextAlert(competitionWith(), { dancer: 'Chris', thresholdHeats: 3 }, new Set()),
-    ).toBeNull();
+    expect(nextAlert(competitionWith(), { dancer: 'Chris', nowMinutes }, new Set())).toBeNull();
   });
 
-  it('warn within the threshold, then again on deck, once each', () => {
-    expect(
-      alertsWhileMovingTo(['h0', 'h1', 'h2', 'h3', 'h3'], { dancer: 'Alex', thresholdHeats: 3 }),
-    ).toEqual([null, ['heads-up', 'h4', 3], null, ['on-deck', 'h4', 1], null]);
-  });
-
-  it('go straight to on deck when the first warning would be 1 heat away', () => {
-    expect(alertsWhileMovingTo(['h0'], { dancer: 'Chris', thresholdHeats: 3 })).toEqual([
-      ['on-deck', 'h1', 1],
+  it(`say to get on deck ${ON_DECK_MINUTES} minutes out, then again when up next, once each`, () => {
+    // Alex's heat (h4, 9:00) is 30, then 23, then 12 minutes away.
+    expect(alertsWhileMovingTo(['h0', 'h1', 'h2', 'h3', 'h3'], 'Alex')).toEqual([
+      null,
+      null,
+      ['on-deck', 'h4', 2, 12],
+      ['up-next', 'h4', 1, 5],
+      null,
     ]);
   });
 
+  it('go straight to up next when the heat is the next one', () => {
+    expect(alertsWhileMovingTo(['h0'], 'Chris')).toEqual([['up-next', 'h1', 1, 7]]);
+  });
+
+  it('follow the clock, not just the floor', () => {
+    const competition = withLive(competitionWith(), markOnFloor(competitionWith().live, 'h1', now));
+    const given = new Set<string>();
+    // Alex's heat is estimated at 9:43: 23 minutes away now, 15 minutes away at 9:28.
+    expect(nextAlert(competition, { dancer: 'Alex', nowMinutes }, given)).toBeNull();
+    expect(nextAlert(competition, { dancer: 'Alex', nowMinutes: nowMinutes + 8 }, given)).toEqual({
+      type: 'on-deck',
+      heatId: 'h4',
+      heatsAway: 3,
+      minutesAway: 15,
+    });
+  });
+
   it('skip heats that depend on a callback', () => {
-    expect(alertsWhileMovingTo(['h1'], { dancer: 'Jo', thresholdHeats: 3 })).toEqual([null]);
+    expect(alertsWhileMovingTo(['h1'], 'Jo')).toEqual([null]);
   });
 });

@@ -2,6 +2,8 @@
 
 Status: agreed · 2026-11-02 · Purdue (Nov 14) runs on Firebase
 
+> **Update, 2026-11-11: Purdue only.** The app is now specific to the Purdue Ballroom Classic. The official 2026 schedule is built in ([src/domain/purdue.ts](../../src/domain/purdue.ts)) and replaces schedule pasting; team creation sets up that one competition; competition creation and archiving, the general schedule parser, the event review flag, and the after-Purdue milestones 6 and 7 are dropped. The Firestore layout and rules below are unchanged, so existing data needs no migration: the competition is still one document under `competitions/`, pointed to by `activeCompetitionId`. Sections below that describe the dropped features are kept as history.
+
 ## Summary
 
 Move the heat sheet from the Claude artifact database to Firebase, and from "one competition, pasted from a spreadsheet" to "one team, one active competition at a time." The captain signs in with Google and sets up each competition. Teammates join with a link, pick their name once, and can then move the floor and record callbacks. The app is hosted on GitHub Pages.
@@ -21,7 +23,7 @@ Move the heat sheet from the Claude artifact database to Firebase, and from "one
 - More than one team per deployment.
 - Multi-day competitions. All of the team's competitions are one day.
 - Scraping schedules from o2cm or elsewhere. The captain pastes them.
-- Push notifications when the app is closed.
+- ~~Push notifications when the app is closed.~~ Added 2026-11-12: web push through Firebase Cloud Messaging, sent by a Cloud Function (`functions/`); tokens in `teams/{t}/pushTokens/{uid}`, sent notifications in `competitions/{c}/pushSent/{uid}_{heatId}:{type}`.
 
 ## Who uses it
 

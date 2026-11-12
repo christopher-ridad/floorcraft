@@ -2,7 +2,6 @@
 export interface Preferences {
   /** The dancer this phone gives alerts for. Empty until chosen. */
   dancer: string;
-  alertThresholdHeats: number;
   chime: boolean;
   vibrate: boolean;
   keepScreenAwake: boolean;
@@ -14,12 +13,9 @@ export interface Preferences {
 
 export const DEFAULT_PREFERENCES: Readonly<Preferences> = {
   dancer: '',
-  alertThresholdHeats: 3,
   chime: true,
   vibrate: true,
   keepScreenAwake: false,
   showPossibleHeats: true,
   skipDancerClaim: false,
 };
-
-export const ALERT_THRESHOLD_CHOICES = [1, 2, 3, 4, 5, 6, 8] as const;

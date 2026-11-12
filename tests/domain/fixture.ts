@@ -21,7 +21,6 @@ export const events: EventDetails[] = [
     level: 'bronze',
     style: 'smooth',
     dances: 'WT',
-    confirmed: false,
   },
   {
     eventId: 'e2',
@@ -30,7 +29,6 @@ export const events: EventDetails[] = [
     level: 'bronze',
     style: 'smooth',
     dances: 'FV',
-    confirmed: false,
   },
   {
     eventId: 'e3',
@@ -39,7 +37,6 @@ export const events: EventDetails[] = [
     level: 'newcomer',
     style: 'latin',
     dances: '',
-    confirmed: false,
   },
 ];
 

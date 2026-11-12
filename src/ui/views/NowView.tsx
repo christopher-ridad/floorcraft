@@ -1,3 +1,4 @@
+import { isOnDeckTime } from '../../domain/alerts';
 import { pendingCallbacks } from '../../domain/callbacks';
 import type { Competition } from '../../domain/competition';
 import { formatClockTime } from '../../domain/clock';
@@ -11,6 +12,7 @@ import { estimatedMinutes, heatsAway } from '../../domain/pace';
 import type { Heat } from '../../domain/types';
 import { hasTeam, TeamChips } from '../components/CoupleChip';
 import { NoSchedule } from '../components/EmptyState';
+import { NotificationsCard } from '../components/NotificationsCard';
 import { HeatRow } from '../components/HeatRow';
 import { PossibleHeatsToggle } from '../components/PossibleHeats';
 import { DancerPicker } from '../components/DancerPicker';
@@ -26,6 +28,7 @@ export function NowView() {
   return (
     <>
       {store.preferences.value.dancer ? <MyNextHeat /> : <WhoAreYou />}
+      {store.preferences.value.dancer && <NotificationsCard onlyIfNeeded />}
       <OnTheFloor />
       <CallbacksToEnter />
       <TeamUpNext />
@@ -62,7 +65,7 @@ function MyNextHeat() {
   const { store } = useApp();
   const minuteOfDay = useMinuteOfDay();
   const competition = store.competition.value;
-  const { dancer, alertThresholdHeats } = store.preferences.value;
+  const { dancer } = store.preferences.value;
   const { currentIndex } = competition;
 
   const upcoming = upcomingHeatsFor(competition, dancer);
@@ -132,14 +135,17 @@ function MyNextHeat() {
   if (next) {
     const nextAway = away(next.heat);
     const nextEstimate = estimate(next.heat);
-    const isHot = nextAway !== null && nextAway <= alertThresholdHeats;
+    const isOnDeck = nextAway !== null && isOnDeckTime(nextEstimate, minuteOfDay);
+    const isHot = nextAway === 1 || isOnDeck;
     const minutesUntil = nextEstimate === null ? 0 : Math.round(nextEstimate - minuteOfDay);
     const headline =
       nextAway === null
         ? `At ${formatClockTime(nextEstimate)}`
         : nextAway === 1
-          ? 'On deck'
-          : `${nextAway} heats away`;
+          ? 'Up next'
+          : isOnDeck
+            ? `On deck · ${nextAway} heats away`
+            : `${nextAway} heats away`;
     return (
       <div class={cx(styles.me, isHot && styles.hot)} aria-live="polite">
         <div class="muted">{dancer}, your next heat</div>

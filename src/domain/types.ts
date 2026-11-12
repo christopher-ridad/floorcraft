@@ -40,11 +40,13 @@ export interface CompetitionInfo {
   /** Local date, `YYYY-MM-DD`. */
   date: string;
   status: CompetitionStatus;
+  /** The version of the built-in schedule and partnerships last applied; absent if never. */
+  officialVersion?: number;
 }
 
 /**
- * One event on a competition's schedule, however many rounds it has. `eventId` stays the same
- * when an updated schedule is pasted, even if the event is renumbered.
+ * One event on the schedule, however many rounds it has. `eventId` stays the same when the
+ * schedule is replaced or edited, even if the event is renumbered.
  */
 export interface EventDetails {
   eventId: string;
@@ -56,8 +58,6 @@ export interface EventDetails {
   style: DanceStyle;
   /** Dance letters as written, e.g. `WT`. Empty when none are listed. */
   dances: string;
-  /** Set once the captain has reviewed the details. */
-  confirmed: boolean;
 }
 
 /** A heat of an event, e.g. `9:39 AM [4] Newcomer Amer. Waltz 1st Round`. */

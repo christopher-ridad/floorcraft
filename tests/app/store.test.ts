@@ -5,6 +5,11 @@ import type { Notice } from '../../src/app/notices';
 import { SyncFailure } from '../../src/app/ports';
 import type { Preferences } from '../../src/app/preferences';
 import { createAppStore, type AppStore } from '../../src/app/store';
+import {
+  isOfficialSchedule,
+  OFFICIAL_DATA_VERSION,
+  officialSchedule,
+} from '../../src/domain/purdue';
 import type { CallbackMarks, FloorState } from '../../src/domain/types';
 import { backupFromLegacy } from '../../src/infra/legacy/legacyBackup';
 import { at } from '../domain/fixture';
@@ -213,26 +218,26 @@ describe('floor and callback actions', () => {
 });
 
 describe('schedule actions', () => {
-  it('imports a schedule, clearing the floor and keeping callbacks on matching events', () => {
+  it('loads the official schedule, clearing the floor and keeping callbacks on matching events', () => {
     const callbacks = { c1_e1: { reachedRound: 4 as const, eliminated: false } };
-    const { store } = start({ floor: onFloor('h3'), callbacks });
+    const { store, backend } = start({ floor: onFloor('h3'), callbacks });
 
-    const count = store.actions.importSchedule(
-      ['9:00 AM [5] Bronze Amer. Smooth 1st Round (WT)', '9:10 AM Lunch'].join('\n'),
-    );
+    const result = store.actions.loadOfficialSchedule();
 
-    expect(count).toBe(1);
-    expect(store.schedule.value.map((item) => item.id)).toEqual(['new1', 'new2']);
-    // Renumbered from 1 to 5, but still the same event: entries and the callback stay attached.
-    expect(store.schedule.value[0]).toMatchObject({ eventId: 'e1', eventNumber: 5 });
-    expect(store.competition.value.coupleEvents.get('c1')).toEqual(['e1']);
+    expect(result).toEqual({
+      heats: officialSchedule().items.filter((item) => item.kind === 'heat').length,
+      // Pat & TBA's entry for an event that was already gone.
+      droppedEntries: 1,
+    });
+    expect(isOfficialSchedule(store.schedule.value)).toBe(true);
+    // The same events, now under their official numbers: entries and the callback stay attached.
+    expect(store.competition.value.events.get('e1')?.eventNumber).toBe(1);
+    expect(store.competition.value.events.get('e3')?.eventNumber).toBe(37);
+    expect(store.competition.value.coupleEvents.get('c1')).toEqual(['e1', 'e2']);
     expect(store.live.value).toEqual({ currentItemId: null, currentSetAt: null, callbacks });
-  });
-
-  it('ignores an import with no heats', () => {
-    const { store, backend } = start();
-    expect(store.actions.importSchedule('9:10 AM Lunch')).toBe(0);
-    expect(backend.writes).toEqual([]);
+    expect(writesOf(backend, 'saveFloor')).toEqual([
+      [COMPETITION_ID, { currentItemId: null, currentSetAt: null }],
+    ]);
   });
 
   it('edits a line as a heat or a break, and rejects a bad time', () => {
@@ -296,29 +301,23 @@ describe('schedule actions', () => {
 describe('couple and entry actions', () => {
   const couple = (store: AppStore, id: string) => store.couples.value.find((c) => c.id === id);
 
-  it('imports couples from the spreadsheet, keeping existing partnerships', () => {
-    const { store } = start();
-    expect(store.actions.importEntries('Kim Lee\nLead Follow Level Events')).toEqual({
-      couples: 0,
-      unmatched: [],
-    });
-    expect(store.couples.value).toHaveLength(4);
+  it('applies the built-in partnerships and schedule, keeping existing ids', () => {
+    const callbacks = { c1_e1: { reachedRound: 4 as const, eliminated: false } };
+    const { store } = start({ callbacks });
 
-    const result = store.actions.importEntries(
-      ['Chris\tBrooke\tBronze\tBronze A. Smooth (FV)', 'Kim\tLee\tGold\tGold Intl. Tango'].join(
-        '\n',
-      ),
-    );
-    expect(result).toEqual({
-      couples: 2,
-      unmatched: [{ lead: 'Kim', follow: 'Lee', entry: 'Gold Intl. Tango' }],
-    });
-    expect(store.couples.value.map((c) => `${c.lead} & ${c.follow}`)).toEqual([
-      'Chris & Brooke',
-      'Kim & Lee',
-    ]);
-    expect(store.competition.value.coupleEvents.get('c1')).toEqual(['e2']);
-    expect(store.competition.value.entries['c3']).toEqual([]);
+    expect(store.actions.applyOfficialData()).toBe(true);
+
+    expect(isOfficialSchedule(store.schedule.value)).toBe(true);
+    expect(store.couples.value).toHaveLength(21);
+    // Chris & Brooke keep their partnership, so the callback mark stays theirs.
+    const chrisAndBrooke = store.competition.value.coupleEvents.get('c1') ?? [];
+    expect(chrisAndBrooke).toHaveLength(13);
+    expect(chrisAndBrooke).toContain('e1');
+    expect(store.live.value.callbacks).toEqual(callbacks);
+    // Sam & Jo aren't on this year's sheet.
+    expect(couple(store, 'c3')).toBeUndefined();
+    expect(store.competition.value.missingEntries).toEqual([]);
+    expect(store.activeCompetition.value?.officialVersion).toBe(OFFICIAL_DATA_VERSION);
   });
 
   it('adds a couple only with a lead, defaulting the follow to TBA', () => {
@@ -365,7 +364,6 @@ describe('backups', () => {
     let next = 0;
     return backupFromLegacy(
       { schedule: legacy('schedule'), entries: legacy('entries') },
-      { name: 'Purdue Ballroom Classic', date: '2026-11-14', status: 'active' },
       () => `purdue${++next}`,
     ).backup;
   };
@@ -436,21 +434,22 @@ describe('alerts', () => {
 
   it('chime, vibrate and publish a notice, once per alert', async () => {
     const { backend, alerts, notices } = start({
-      preferences: { dancer: 'Alex', alertThresholdHeats: 3 },
+      preferences: { dancer: 'Alex' },
     });
     await moveFloor(backend, 'h1');
     await moveFloor(backend, 'h1');
 
-    expect(alerts.played).toEqual(['chime 1', 'vibrate 250,100,250']);
+    // Alex's heat is estimated 3 minutes from now: inside the on-deck window.
+    expect(alerts.played).toEqual(['chime 2', 'vibrate 300,120,300,120,300']);
     expect(notices).toEqual([
-      { kind: 'alert', alert: { type: 'heads-up', heatId: 'h4', heatsAway: 3 } },
+      { kind: 'alert', alert: { type: 'on-deck', heatId: 'h4', heatsAway: 3, minutesAway: 3 } },
     ]);
   });
 
   it('respect the sound and vibration settings', async () => {
     const { backend, alerts } = start({ preferences: { dancer: 'Chris', chime: false } });
     await moveFloor(backend, 'h0');
-    expect(alerts.played).toEqual(['vibrate 300,120,300,120,300']);
+    expect(alerts.played).toEqual(['vibrate 400,120,400,120,400']);
   });
 
   it('start over when this phone alerts for someone else or clears live tracking', async () => {
@@ -476,9 +475,9 @@ describe('alerts', () => {
 describe('preferences', () => {
   it('are saved on this phone', () => {
     const { store, preferences } = start();
-    store.actions.updatePreferences({ alertThresholdHeats: 5 });
-    expect(store.preferences.value.alertThresholdHeats).toBe(5);
-    expect(preferences.stored.alertThresholdHeats).toBe(5);
+    store.actions.updatePreferences({ chime: false });
+    expect(store.preferences.value.chime).toBe(false);
+    expect(preferences.stored.chime).toBe(false);
   });
 
   it('turn keep-awake back off when the browser refuses it', async () => {

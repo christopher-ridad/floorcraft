@@ -8,6 +8,7 @@ import type { AuthUser } from '../../src/app/ports';
 import type { Preferences } from '../../src/app/preferences';
 import { createSession } from '../../src/app/session';
 import { createAppStore } from '../../src/app/store';
+import { isOfficialSchedule } from '../../src/domain/purdue';
 import type { FloorState } from '../../src/domain/types';
 import { backupFromLegacy } from '../../src/infra/legacy/legacyBackup';
 import { memoryStorage } from '../../src/infra/storage/keyValueStorage';
@@ -112,12 +113,12 @@ describe('Now tab', () => {
     expect(screen.getByRole('status').textContent).toBe('Alerts set for Alex.');
   });
 
-  it('counts down the heats and alerts when you are on deck', async () => {
+  it('counts down the heats and alerts when you are up next', async () => {
     const { backend } = await renderApp({ preferences: { dancer: 'Chris' } });
     await backend.otherPhone.saveFloor(COMPETITION_ID, onTheFloor('h0'));
 
-    expect(await screen.findByText('On deck')).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toBe("You're on deck. Next heat is yours.");
+    expect(await screen.findByText('Up next')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe("You're up next. Next heat is yours.");
   });
 
   it('does not say you are on the floor for a heat you only dance if called back', async () => {
@@ -263,16 +264,18 @@ describe('People tab', () => {
 });
 
 describe('Setup tab', () => {
-  it('replaces the schedule from pasted text', async () => {
+  it('loads the official schedule after confirming', async () => {
     const { store, user } = await renderApp({ tab: 'setup' });
-    const box = await screen.findByLabelText('Schedule text');
-    await user.click(box);
-    await user.paste('9:00 AM [1] Bronze Amer. Smooth 1st Round (WT)');
+    expect(await screen.findByText(/This isn't the official schedule/)).toBeTruthy();
 
-    expect(await screen.findByText('1 heats found')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Replace schedule' }));
-    expect(store.schedule.value).toHaveLength(1);
-    expect(screen.getByRole('status').textContent).toBe('Schedule replaced: 1 heats.');
+    await user.click(screen.getByRole('button', { name: 'Load the official schedule' }));
+    await user.click(screen.getByRole('button', { name: 'Load it' }));
+
+    expect(isOfficialSchedule(store.schedule.value)).toBe(true);
+    expect(await screen.findByText('This is the official schedule.')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe(
+      'Official schedule loaded: 145 heats. 1 entry for events not on it; see Couples & entries.',
+    );
   });
 
   it('flags entries for events no longer on the schedule, and edits a couple’s events', async () => {
@@ -345,8 +348,6 @@ describe('getting in', () => {
 
     await user.click(screen.getByText('Setting up the team for the first time?'));
     await user.type(screen.getByLabelText('Team name'), 'Purdue Ballroom');
-    await user.type(screen.getByLabelText('First competition'), 'Purdue Ballroom Classic');
-    await user.type(screen.getByLabelText('Date'), '2026-11-14');
     await user.click(screen.getByRole('button', { name: 'Create the team' }));
 
     expect(await screen.findByRole('heading', { name: 'Who are you?' })).toBeTruthy();
@@ -402,7 +403,6 @@ describe('backups', () => {
       JSON.parse(readFileSync(resolve('tests/fixtures/legacy-artifact', `${name}.json`), 'utf8'));
     const { backup } = backupFromLegacy(
       { schedule: legacy('schedule'), entries: legacy('entries') },
-      { name: 'Purdue Ballroom Classic', date: '2026-11-14', status: 'active' },
       () => crypto.randomUUID(),
     );
     const { user, store } = await renderApp({ tab: 'setup' });
@@ -413,7 +413,10 @@ describe('backups', () => {
     await user.click(screen.getByRole('button', { name: 'Restore' }));
 
     expect(store.activeCompetition.value?.name).toBe('Purdue Ballroom Classic');
-    expect(store.schedule.value).toHaveLength(147);
+    // The captain's phone brings the old data up to the official schedule and partnerships.
+    await settle();
+    expect(isOfficialSchedule(store.schedule.value)).toBe(true);
+    expect(store.couples.value).toHaveLength(21);
     expect(screen.getByRole('status').textContent).toBe('Backup restored.');
   });
 

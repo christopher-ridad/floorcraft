@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useState } from 'preact/hooks';
 import { dancerName } from '../domain/dancers';
+import { PURDUE_CLASSIC } from '../domain/purdue';
 import { useApp } from './context';
 import { sessionProblemText } from './format';
 import styles from './AccessScreens.module.css';
@@ -61,6 +62,44 @@ function CaptainSignIn({ label = 'Captain? Sign in with Google' }: { label?: str
   );
 }
 
+/** For a copy of the app with no address bar (on the Home Screen): paste the team link here. */
+function JoinWithLink() {
+  const { session } = useApp();
+  const [link, setLink] = useState('');
+  const [isInvalid, setInvalid] = useState(false);
+  return (
+    <form
+      class="stack"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setInvalid(!session.actions.joinWithLink(link));
+      }}
+    >
+      <label class="field" for="teamLink">
+        Or paste the team link
+        <input
+          id="teamLink"
+          type="url"
+          inputMode="url"
+          autoComplete="off"
+          placeholder="https://…#join=…"
+          value={link}
+          onInput={(event) => {
+            setLink(event.currentTarget.value);
+            setInvalid(false);
+          }}
+        />
+      </label>
+      {isInvalid && (
+        <span class="bad">That isn't a team link. Copy the whole link and try again.</span>
+      )}
+      <button class="btn primary" type="submit" disabled={!link.trim()}>
+        Join the team
+      </button>
+    </form>
+  );
+}
+
 function Welcome() {
   return (
     <Screen>
@@ -68,6 +107,7 @@ function Welcome() {
         To join your team, open the link your captain sent you. You'll pick your name, and the app
         will tell you when you're up.
       </p>
+      <JoinWithLink />
       <CaptainSignIn />
     </Screen>
   );
@@ -78,6 +118,7 @@ function JoinFailed() {
     <Screen>
       <h2 class={styles.title}>That join link didn't work</h2>
       <p class={styles.lead}>It may be an old link. Ask your captain for the current one.</p>
+      <JoinWithLink />
       <CaptainSignIn />
     </Screen>
   );
@@ -105,14 +146,12 @@ function NotOnTeam() {
 function CreateTeam() {
   const { session } = useApp();
   const [teamName, setTeamName] = useState('');
-  const [competitionName, setCompetitionName] = useState('');
-  const [date, setDate] = useState('');
   const [isBusy, setBusy] = useState(false);
-  const isComplete = !!(teamName.trim() && competitionName.trim() && date);
+  const isComplete = !!teamName.trim();
 
   const create = async () => {
     setBusy(true);
-    await session.actions.createTeam(teamName, competitionName, date);
+    await session.actions.createTeam(teamName);
     setBusy(false);
   };
 
@@ -129,29 +168,13 @@ function CreateTeam() {
             onInput={(event) => setTeamName(event.currentTarget.value)}
           />
         </label>
-        <label class="field" for="competitionName">
-          First competition
-          <input
-            id="competitionName"
-            type="text"
-            placeholder="Purdue Ballroom Classic"
-            value={competitionName}
-            onInput={(event) => setCompetitionName(event.currentTarget.value)}
-          />
-        </label>
-        <label class="field" for="competitionDate">
-          Date
-          <input
-            id="competitionDate"
-            type="date"
-            value={date}
-            onInput={(event) => setDate(event.currentTarget.value)}
-          />
-        </label>
         <button class="btn primary" disabled={!isComplete || isBusy} onClick={() => void create()}>
           Create the team
         </button>
-        <span class="muted">You'll be its captain. You can add co-captains later.</span>
+        <span class="muted">
+          You'll be its captain. The {PURDUE_CLASSIC.name} schedule and everyone's dances come with
+          it.
+        </span>
       </div>
     </details>
   );
@@ -168,9 +191,21 @@ function ChooseDancer() {
   return (
     <Screen>
       <h2 class={styles.title}>Who are you?</h2>
+      {session.pushStatus.value === 'install-first' && (
+        <div class="banner">
+          On iPhone? To get notifications, first tap <b>Share → Add to Home Screen</b>, open Heat
+          Sheet from your Home Screen, paste the team link, and pick your name there instead.
+        </div>
+      )}
       <p class={styles.lead}>Pick your name so the app can tell you when you're up.</p>
       {!store.loaded.value.team ? (
         <p class="muted">Loading the team…</p>
+      ) : !dancers.length ? (
+        <p class="muted" role="status">
+          {session.isCaptain.value
+            ? 'Adding the team’s names…'
+            : "Your captain hasn't opened the app yet, so the team's names aren't here. Tap “I'm not dancing” for now; you can pick your name later in Setup."}
+        </p>
       ) : (
         <div class={styles.dancers}>
           {dancers.map((dancer) => {

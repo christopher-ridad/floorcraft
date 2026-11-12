@@ -51,6 +51,16 @@ service cloud.firestore {
         allow delete: if isCaptain(t) || (signedIn() && request.auth.uid == uid);
       }
 
+      // A phone's push token, for notifications when the app is closed. Each phone sees and sets
+      // only its own; the Cloud Function reads them with admin access.
+      match /pushTokens/{uid} {
+        allow read, delete: if signedIn() && request.auth.uid == uid;
+        allow create, update: if canRead(t) && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['token', 'updatedAt'])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() < 1024;
+      }
+
       // One phone per dancer: `create` fails if someone already holds the claim.
       match /claims/{dancerId} {
         allow read: if canRead(t);

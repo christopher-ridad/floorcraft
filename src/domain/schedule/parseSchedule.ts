@@ -1,13 +1,8 @@
-import { parseClockTime } from '../clock';
 import { randomId, type EventDetails, type IdFactory, type Schedule } from '../types';
 import { identifyEvents, type ScheduleLine } from './identifyEvents';
 
-/** Splits a line before each time, so several heats pasted onto one line come apart. */
-const BEFORE_EACH_TIME = /(?=\b\d{1,2}:\d{2}\s*[AP]\.?M\b)/i;
-/** The competition's page footer, e.g. `14th Annual Purdue Ballroom Classic`. */
-const PAGE_FOOTER = /\s+\d+(st|nd|rd|th)\s+Annual.*$/i;
-const HEAT_LINE = /^(\d{1,2}:\d{2}\s*[AP]\.?M\.?)\s+\[(\d+)\]\s+(.+)$/i;
-const TIMED_LINE = /^(\d{1,2}:\d{2}\s*[AP]\.?M\.?)\s+(.+)$/i;
+const HEAT_LINE = /^(\d{1,2}:\d{2}\s*[AP]M)\s+\[(\d+)\]\s+(.+)$/i;
+const TIMED_LINE = /^(\d{1,2}:\d{2}\s*[AP]M)\s+(.+)$/i;
 
 const normalizeTime = (time: string) => time.toUpperCase().replace(/\s+/g, ' ');
 
@@ -18,8 +13,8 @@ export interface ParseScheduleOptions {
 }
 
 /**
- * Parses a pasted heat list, one item per line:
- * `9:39 AM [4] Newcomer Amer. Waltz 1st Round` is a heat, `12:00 PM Lunch` is a break.
+ * Reads a schedule written one item per line, in the posted format:
+ * `9:20 AM [4] Newcomer Amer. Waltz 1st Round` is a heat, `10:42 AM Smooth Awards` is a break.
  * Lines without a time are ignored.
  */
 export function parseSchedule(
@@ -31,12 +26,8 @@ export function parseSchedule(
 
 function parseScheduleLines(text: string, createId: IdFactory): ScheduleLine[] {
   const items: ScheduleLine[] = [];
-  const lines = text.split(/\r?\n/).flatMap((line) => line.split(BEFORE_EACH_TIME));
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim().replace(PAGE_FOOTER, '').trim();
-    if (!line) continue;
-
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
     const heat = HEAT_LINE.exec(line);
     if (heat) {
       const [, time = '', eventNumber = '', name = ''] = heat;
@@ -49,7 +40,6 @@ function parseScheduleLines(text: string, createId: IdFactory): ScheduleLine[] {
       });
       continue;
     }
-
     const timed = TIMED_LINE.exec(line);
     if (timed) {
       const [, time = '', label = ''] = timed;
@@ -61,17 +51,5 @@ function parseScheduleLines(text: string, createId: IdFactory): ScheduleLine[] {
       });
     }
   }
-  return restoreTimeOrder(items);
-}
-
-/**
- * Text copied from a two-column PDF comes out interleaved. If times ever go backwards, sort by
- * time. Competitions are one day, so time order is schedule order.
- */
-function restoreTimeOrder(items: ScheduleLine[]): ScheduleLine[] {
-  const minutes = (item: ScheduleLine) => parseClockTime(item.scheduledTime) ?? 0;
-  const isOutOfOrder = items.some(
-    (item, i) => i > 0 && minutes(item) < minutes(items[i - 1] as ScheduleLine),
-  );
-  return isOutOfOrder ? [...items].sort((a, b) => minutes(a) - minutes(b)) : items;
+  return items;
 }

@@ -167,6 +167,21 @@ describe('picking a name', () => {
     await phone('phoneB').claimDancer('phoneB', 'chris', null);
   });
 
+  it('lets a captain free up a name for another phone, and no one else', async () => {
+    await phone('phoneA').claimDancer('phoneA', 'chris', null);
+    await expect(phone('phoneB').releaseDancer('chris', 'phoneA')).rejects.toMatchObject({
+      code: 'read-only',
+    });
+
+    await captain().releaseDancer('chris', 'phoneA');
+
+    expect(await claimsOf(phone('phoneB'))).toEqual({});
+    expect(await accessOf(phone('phoneA'), 'phoneA')).toMatchObject({
+      membership: { dancerId: null },
+    });
+    await phone('phoneB').claimDancer('phoneB', 'chris', null);
+  });
+
   it('records a member who links a Google account', async () => {
     await phone('phoneA').setProvider('phoneA', 'google');
     expect(await accessOf(phone('phoneA'), 'phoneA')).toMatchObject({

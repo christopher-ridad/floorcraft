@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   setDoc,
@@ -144,6 +145,18 @@ export function firestoreAccessRepository({
 
     setProvider: (uid, provider) => write(() => updateDoc(memberRef(uid), { provider })),
 
+    releaseDancer: (dancerId, holderUid) =>
+      write(async () => {
+        await deleteDoc(doc(firestore, `${teamPath}/claims/${dancerId}`));
+        // The phone that held the name stops being that dancer (if it's still on the team).
+        await updateDoc(memberRef(holderUid), { dancerId: null }).catch(() => undefined);
+      }),
+
     setJoinCode: (joinCode) => write(() => setDoc(joinRef(), { code: joinCode })),
+
+    savePushToken: (uid, token) =>
+      write(() =>
+        setDoc(doc(firestore, `${teamPath}/pushTokens/${uid}`), { token, updatedAt: Date.now() }),
+      ),
   };
 }

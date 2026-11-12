@@ -1,8 +1,7 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parsePartnershipRows } from '../../src/domain/entries/parsePartnershipRows';
+import { OFFICIAL_PARTNERSHIPS_TEXT, officialSchedule } from '../../src/domain/purdue';
 import { buildEventCatalog } from '../../src/domain/schedule/eventCatalog';
-import { parseSchedule } from '../../src/domain/schedule/parseSchedule';
 import { findPartnership, importPartnerships, resolveCouples } from '../../src/domain/team';
 import type { Dancer, Partnership } from '../../src/domain/types';
 import { events } from './fixture';
@@ -101,19 +100,21 @@ describe('importing partnerships', () => {
     expect(Object.values(result.entries)).toEqual([['e1', 'e2']]);
   });
 
-  it('imports the whole sample sheet against the sample schedule', () => {
-    const read = (file: string) =>
-      readFileSync(new URL(`../../data/${file}`, import.meta.url), 'utf8');
-    const schedule = parseSchedule(read('schedule-2025-tentative.txt'));
+  it('imports the whole built-in sheet against the official schedule', () => {
+    const schedule = officialSchedule();
     const result = importPartnerships(
-      parsePartnershipRows(read('partnerships-2026.txt')),
+      parsePartnershipRows(OFFICIAL_PARTNERSHIPS_TEXT),
       empty,
       buildEventCatalog(schedule.events),
       sequentialIds(),
     );
-    expect(result.partnerships).toHaveLength(20);
+    expect(result.partnerships).toHaveLength(21);
     expect(result.unmatched).toEqual([]);
-    // "Liam (TBA)" and "Jiayi"/"Jiayi TBA" rows share dancers with other rows.
+    // A lead or follow still to be announced is no dancer.
+    const jiayi = result.dancers.find((dancer) => dancer.name === 'Jiayi')?.id;
+    const tbaLead = result.partnerships.find((p) => p.leadId === null && p.followId === jiayi);
+    expect(result.entries[tbaLead?.id ?? '']).toHaveLength(5);
+    // "Liam (TBA)" and the TBA rows share dancers with other rows.
     expect(new Set(result.dancers.map((dancer) => dancer.name.toLowerCase())).size).toBe(
       result.dancers.length,
     );

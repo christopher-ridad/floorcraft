@@ -1,4 +1,4 @@
-import { initializeApp, type FirebaseOptions } from 'firebase/app';
+import { initializeApp, type FirebaseApp, type FirebaseOptions } from 'firebase/app';
 import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth';
 import {
   connectFirestoreEmulator,
@@ -12,6 +12,7 @@ import {
 export const EMULATOR_PORTS = { auth: 9099, firestore: 8080 } as const;
 
 export interface FirebaseServices {
+  app: FirebaseApp;
   auth: Auth;
   firestore: Firestore;
 }
@@ -48,5 +49,5 @@ export function connectFirebase({
     });
     connectFirestoreEmulator(firestore, emulatorHost, EMULATOR_PORTS.firestore);
   }
-  return { auth, firestore };
+  return { app, auth, firestore };
 }

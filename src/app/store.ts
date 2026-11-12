@@ -215,7 +215,13 @@ export function createAppStore(deps: AppDependencies): AppStore {
 
     start() {
       if (stops.length) return;
-      alertWatcher = watchAlerts({ competition, preferences, output: deps.alertOutput, notices });
+      alertWatcher = watchAlerts({
+        competition,
+        preferences,
+        output: deps.alertOutput,
+        notices,
+        clock: deps.clock,
+      });
       stops.push(
         connectivity.onChange((online) => (isOnline.value = online)),
         () => alertWatcher?.dispose(),

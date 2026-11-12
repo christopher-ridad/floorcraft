@@ -137,6 +137,45 @@ export function TeamAccessCard() {
   );
 }
 
+/**
+ * Which dancers' names are linked to a phone, and freeing one up, e.g. when someone moves to the
+ * Home Screen app on their iPhone and finds their name taken. Captains only.
+ */
+export function NamesInUseCard() {
+  const { session, store, view } = useApp();
+  const claims = session.claims.value;
+  const claimed = store.team.value.dancers
+    .filter((dancer) => claims[dancer.id])
+    .sort((a, b) => dancerName(a.name).localeCompare(dancerName(b.name)));
+
+  return (
+    <div class="card stack">
+      <span class={cx('muted', styles.help)}>
+        Each name can be picked on one phone. If someone finds their own name taken (say, after
+        adding the app to their iPhone's Home Screen), free it up here and they can pick it again.
+      </span>
+      {claimed.length ? (
+        claimed.map((dancer) => (
+          <div class={styles.setting} key={dancer.id}>
+            <span>{dancerName(dancer.name)}</span>
+            <button
+              class="btn small"
+              onClick={() => {
+                void session.actions.releaseDancer(dancer.id);
+                view.showToast(`${dancerName(dancer.name)} can pick their name again.`);
+              }}
+            >
+              Free up
+            </button>
+          </div>
+        ))
+      ) : (
+        <span class="muted">No one has picked their name yet.</span>
+      )}
+    </div>
+  );
+}
+
 /** Downloading a backup of the team, and restoring one (how data moves into a new team). */
 export function BackupCard() {
   const { store, view } = useApp();

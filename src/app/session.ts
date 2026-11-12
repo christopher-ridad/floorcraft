@@ -1,11 +1,14 @@
 import { computed, effect, signal } from '@preact/signals-core';
 import { dancerName } from '../domain/dancers';
+import { OFFICIAL_DATA_VERSION } from '../domain/purdue';
 import { generateJoinCode } from './joinCode';
 import {
   AuthFailure,
   type AccessRepository,
   type AuthService,
   type AuthUser,
+  type PushNotifications,
+  type PushStatus,
   type TeamAccess,
 } from './ports';
 import type { AppStore } from './store';
@@ -25,7 +28,12 @@ export type SessionPhase =
 
 /** Something the person tried that didn't work; the UI words it. */
 export type SessionProblem =
-  'sign-in-failed' | 'account-in-use' | 'team-exists' | 'dancer-taken' | 'network';
+  | 'sign-in-failed'
+  | 'account-in-use'
+  | 'team-exists'
+  | 'dancer-taken'
+  | 'notifications-refused'
+  | 'network';
 
 export interface SessionDependencies {
   auth: AuthService;
@@ -36,10 +44,25 @@ export interface SessionDependencies {
   /** Called once the join code has been used, so the link can be cleared from the address bar. */
   onJoinCodeUsed(): void;
   createJoinCode?: () => string;
+  /** Notifications while the app is closed. Without it, they're unavailable. */
+  push?: PushNotifications;
 }
+
+const NO_PUSH: PushNotifications = {
+  status: () => 'unavailable',
+  getToken: () => Promise.reject(new Error('Notifications are unavailable here.')),
+};
 
 export type Session = ReturnType<typeof createSession>;
 export type SessionActions = Session['actions'];
+
+/** The code in a team link (`…#join=CODE`), or a bare code. Null when there's none. */
+export function joinCodeFromLink(text: string): string | null {
+  const trimmed = text.trim();
+  const fromLink = /#join=([^&\s]+)/.exec(trimmed)?.[1];
+  if (fromLink) return decodeURIComponent(fromLink);
+  return /^[\w-]{4,}$/.test(trimmed) ? trimmed : null;
+}
 
 const problemFor = (error: unknown): SessionProblem => {
   if (error instanceof AuthFailure && error.code === 'account-in-use') return 'account-in-use';
@@ -50,6 +73,8 @@ const problemFor = (error: unknown): SessionProblem => {
 export function createSession(deps: SessionDependencies) {
   const { auth, access, store } = deps;
   const createJoinCode = deps.createJoinCode ?? (() => generateJoinCode());
+  const push = deps.push ?? NO_PUSH;
+  const pushStatus = signal<PushStatus>(push.status());
 
   const user = signal<AuthUser | null | undefined>(undefined);
   const teamAccess = signal<TeamAccess | undefined>(undefined);
@@ -167,6 +192,50 @@ export function createSession(deps: SessionDependencies) {
     });
   }
 
+  /**
+   * When a captain's phone finds the competition behind the built-in schedule and partnerships,
+   * it writes them, once per version, so every phone shows the team's dances with nothing to paste.
+   * (Only captains can write them; members see them as soon as a captain has opened the app.)
+   */
+  function applyOfficialDataOnce() {
+    let appliedTo: string | null = null;
+    return effect(() => {
+      const info = store.activeCompetition.value;
+      const { team, competition } = store.loaded.value;
+      if (!isCaptain.value || !team || !competition || !info) return;
+      const key = `${info.id}@${OFFICIAL_DATA_VERSION}`;
+      if ((info.officialVersion ?? 0) >= OFFICIAL_DATA_VERSION || appliedTo === key) return;
+      appliedTo = key;
+      store.actions.applyOfficialData();
+    });
+  }
+
+  /** Saves this phone's push token, so notifications reach it. Rejects if that fails. */
+  async function registerForPush() {
+    const signedIn = user.peek();
+    if (!signedIn) return;
+    try {
+      const token = await push.getToken();
+      await access.savePushToken(signedIn.uid, token);
+    } finally {
+      pushStatus.value = push.status();
+    }
+  }
+
+  /**
+   * A phone that already allowed notifications re-sends its token each time the app opens, since
+   * push tokens can change.
+   */
+  function refreshPushToken() {
+    let refreshedFor: string | null = null;
+    return effect(() => {
+      const uid = user.value?.uid;
+      if (!uid || !membership.value || pushStatus.value !== 'on' || refreshedFor === uid) return;
+      refreshedFor = uid;
+      registerForPush().catch(() => {});
+    });
+  }
+
   async function attempt(run: () => Promise<void>) {
     problem.value = null;
     try {
@@ -181,10 +250,11 @@ export function createSession(deps: SessionDependencies) {
     signInAsCaptain: () => attempt(() => auth.signInWithGoogle()),
 
     /**
-     * Creates the team with this Google account as captain, and its first competition.
-     * Fails with `team-exists` if the team can't be created (usually: someone already did).
+     * Creates the team with this Google account as captain, and sets up the Purdue Ballroom
+     * Classic with its official schedule, partnerships and entries. Fails with `team-exists` if the team can't be created
+     * (usually: someone already did).
      */
-    async createTeam(teamName: string, competitionName: string, date: string) {
+    async createTeam(teamName: string) {
       problem.value = null;
       const signedIn = user.peek();
       if (!signedIn || signedIn.isAnonymous) {
@@ -197,7 +267,7 @@ export function createSession(deps: SessionDependencies) {
         problem.value = 'team-exists';
         return;
       }
-      store.actions.startCompetition(competitionName, date);
+      store.actions.setUpCompetition();
       watchAccess(signedIn);
     },
 
@@ -244,6 +314,40 @@ export function createSession(deps: SessionDependencies) {
 
     signOut: () => attempt(() => auth.signOut()),
 
+    /**
+     * Joins with a pasted team link (or just its code), for a copy of the app that wasn't opened
+     * from the link, such as one added to an iPhone's Home Screen. Returns false if there's no
+     * code in the text.
+     */
+    joinWithLink(text: string): boolean {
+      const code = joinCodeFromLink(text);
+      if (!code) return false;
+      problem.value = null;
+      pendingJoinCode = code;
+      joinState.value = 'joining';
+      const signedIn = user.peek();
+      if (signedIn) watchAccess(signedIn);
+      else auth.signInAnonymously().catch(() => (joinState.value = 'failed'));
+      return true;
+    },
+
+    /** Asks to allow notifications on this phone and starts sending them here. From a tap. */
+    turnOnNotifications: () =>
+      attempt(async () => {
+        try {
+          await registerForPush();
+        } catch {
+          problem.value = pushStatus.peek() === 'on' ? 'network' : 'notifications-refused';
+        }
+      }),
+
+    /** Frees a dancer's name so they can pick it on another phone. Captains only. */
+    releaseDancer: (dancerId: string) =>
+      attempt(async () => {
+        const holder = claims.peek()[dancerId];
+        if (holder) await access.releaseDancer(dancerId, holder);
+      }),
+
     /** Makes a new join link; the old one stops working. Captains only. */
     replaceJoinCode: () => attempt(() => access.setJoinCode(createJoinCode())),
   };
@@ -256,11 +360,17 @@ export function createSession(deps: SessionDependencies) {
     claims,
     joinCode,
     problem,
+    pushStatus,
     actions,
 
     start() {
       if (stops.length) return;
-      stops.push(auth.onUserChange(onUserChange), followClaimedDancer());
+      stops.push(
+        auth.onUserChange(onUserChange),
+        followClaimedDancer(),
+        applyOfficialDataOnce(),
+        refreshPushToken(),
+      );
     },
 
     dispose() {

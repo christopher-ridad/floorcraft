@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { AuthFailure, type AuthUser } from '../../src/app/ports';
 import type { Preferences } from '../../src/app/preferences';
-import { createSession, type Session } from '../../src/app/session';
+import { createSession, joinCodeFromLink, type Session } from '../../src/app/session';
 import { createAppStore } from '../../src/app/store';
+import { isOfficialSchedule, OFFICIAL_DATA_VERSION } from '../../src/domain/purdue';
+import type { Schedule } from '../../src/domain/types';
 import {
   fakeAccess,
   fakeAlertOutput,
   fakeAuth,
   fakePreferences,
+  fakePush,
   fakeRepository,
   fakeWakeLock,
+  fixtureBackup,
   settle,
 } from './fakes';
 
@@ -34,6 +38,9 @@ interface Options {
   joinCode?: string | null;
   access?: ReturnType<typeof fakeAccess>;
   preferences?: Partial<Preferences>;
+  /** The competition predates the built-in schedule and partnerships. */
+  isOutdated?: boolean;
+  push?: ReturnType<typeof fakePush>;
 }
 
 function start({
@@ -41,9 +48,15 @@ function start({
   joinCode = null,
   access = fakeAccess(),
   preferences,
+  isOutdated = false,
+  push,
 }: Options = {}) {
   const auth = fakeAuth({ signedIn });
-  const backend = fakeRepository();
+  const seed = fixtureBackup();
+  if (isOutdated) {
+    for (const competition of seed.competitions) delete competition.info.officialVersion;
+  }
+  const backend = fakeRepository(seed);
   const store = createAppStore({
     repository: backend.repository,
     preferences: fakePreferences(preferences).store,
@@ -63,6 +76,7 @@ function start({
     joinCode,
     onJoinCodeUsed: () => joinCodeUsed++,
     createJoinCode: () => 'fresh-code',
+    push: push?.push,
   });
   session.start();
   return { session, auth, access, store, backend, joinCodeUsed: () => joinCodeUsed };
@@ -183,27 +197,71 @@ describe('captains', () => {
     expect(session.problem.value).toBe('sign-in-failed');
   });
 
-  it('create the team and its first competition', async () => {
+  it('create the team, with the Purdue Ballroom Classic and its built-in data', async () => {
     const access = fakeAccess({ teamExists: false });
     const { session, backend } = start({ signedIn: captainUser, access });
     expect(session.phase.value).toBe('not-member');
 
-    await session.actions.createTeam('Purdue Ballroom', 'Purdue Ballroom Classic', '2026-11-14');
+    await session.actions.createTeam('Purdue Ballroom');
 
     expect(access.state.captainUids).toEqual(['captain']);
     expect(session.isCaptain.value).toBe(true);
     expect(session.joinCode.value).toBe('fresh-code');
-    // A new team has no earlier competition to archive.
-    expect(backend.writes.map(([method]) => method)).toEqual(['saveCompetition', 'updateTeam']);
-    expect(backend.writes[0]).toEqual([
+    const methods = backend.writes.map(([method]) => method);
+    expect(methods).toEqual([
+      'saveSchedule',
+      'saveDancers',
+      'savePartnerships',
+      'saveEntries',
       'saveCompetition',
-      { id: 'new1', name: 'Purdue Ballroom Classic', date: '2026-11-14', status: 'active' },
+      'updateTeam',
     ]);
+    const [, competitionId, schedule] = backend.writes[0] as [string, string, Schedule];
+    expect(competitionId).toBe('new1');
+    expect(isOfficialSchedule(schedule.items)).toBe(true);
+    expect(backend.writes[4]).toEqual([
+      'saveCompetition',
+      {
+        id: 'new1',
+        name: 'Purdue Ballroom Classic',
+        date: '2026-11-14',
+        status: 'active',
+        officialVersion: OFFICIAL_DATA_VERSION,
+      },
+    ]);
+  });
+
+  it('bring an older competition up to the built-in data on a captain’s phone, once', async () => {
+    const access = fakeAccess({ captainUids: ['captain'] });
+    const { store, backend } = start({ signedIn: captainUser, access, isOutdated: true });
+    await settle();
+
+    expect(store.activeCompetition.value?.officialVersion).toBe(OFFICIAL_DATA_VERSION);
+    expect(isOfficialSchedule(store.schedule.value)).toBe(true);
+    expect(store.couples.value).toHaveLength(21);
+    const writes = backend.writes.length;
+    await settle();
+    expect(backend.writes).toHaveLength(writes);
+  });
+
+  it('leave an older competition alone on a member’s phone', async () => {
+    const access = fakeAccess();
+    await access.access.join('phone', 'team-code', 'anonymous');
+    const { store, backend } = start({
+      signedIn: anonymousPhone('phone'),
+      access,
+      isOutdated: true,
+    });
+    await settle();
+
+    expect(store.loaded.value.competition).toBe(true);
+    expect(store.activeCompetition.value?.officialVersion).toBeUndefined();
+    expect(backend.writes).toEqual([]);
   });
 
   it('cannot create a team that already exists', async () => {
     const { session } = start({ signedIn: captainUser });
-    await session.actions.createTeam('Mine', 'Comp', '2026-11-14');
+    await session.actions.createTeam('Mine');
     expect(session.problem.value).toBe('team-exists');
     expect(session.phase.value).toBe('not-member');
   });
@@ -249,5 +307,109 @@ describe('leaving', () => {
     auth.control.failSignIn = new AuthFailure('account-in-use');
     await session.actions.linkWithGoogle();
     expect(session.problem.value).toBe('account-in-use');
+  });
+});
+
+describe('notifications', () => {
+  const memberPhone = async () => {
+    const access = fakeAccess();
+    await access.access.join('phone', 'team-code', 'anonymous');
+    await access.access.claimDancer('phone', 'chris', null);
+    return access;
+  };
+
+  it('turn on from a tap and save where to send them', async () => {
+    const access = await memberPhone();
+    const push = fakePush('off');
+    const { session } = start({ signedIn: anonymousPhone('phone'), access, push });
+    await settle();
+    expect(session.pushStatus.value).toBe('off');
+
+    await session.actions.turnOnNotifications();
+
+    expect(session.pushStatus.value).toBe('on');
+    expect(access.state.pushTokens.get('phone')).toBe('push-token');
+    expect(session.problem.value).toBeNull();
+  });
+
+  it('explain how to undo a refusal', async () => {
+    const access = await memberPhone();
+    const push = fakePush('off');
+    push.control.refuse = true;
+    const { session } = start({ signedIn: anonymousPhone('phone'), access, push });
+    await settle();
+
+    await session.actions.turnOnNotifications();
+
+    expect(session.pushStatus.value).toBe('blocked');
+    expect(session.problem.value).toBe('notifications-refused');
+    expect(access.state.pushTokens.size).toBe(0);
+  });
+
+  it('re-send the token when the app opens, if already allowed', async () => {
+    const access = await memberPhone();
+    const push = fakePush('on', 'new-token');
+    start({ signedIn: anonymousPhone('phone'), access, push });
+    await settle();
+
+    expect(push.control.asked).toBe(1);
+    expect(access.state.pushTokens.get('phone')).toBe('new-token');
+  });
+
+  it('never ask on their own', async () => {
+    const access = await memberPhone();
+    const push = fakePush('off');
+    start({ signedIn: anonymousPhone('phone'), access, push });
+    await settle();
+    expect(push.control.asked).toBe(0);
+  });
+});
+
+describe('joining from a pasted team link', () => {
+  it.each([
+    ['https://example.github.io/floorcraft/#join=team-code', 'team-code'],
+    ['  team-code ', 'team-code'],
+    ['https://example.github.io/floorcraft/#join=k7mq%2Dx2bn', 'k7mq-x2bn'],
+    ['hello there', null],
+    ['', null],
+  ])('reads the code in %j', (text, code) => {
+    expect(joinCodeFromLink(text)).toBe(code);
+  });
+
+  it('joins with the code, as opening the link would', async () => {
+    const access = fakeAccess();
+    const { session, auth } = start({ access });
+    expect(session.phase.value).toBe('signed-out');
+
+    expect(session.actions.joinWithLink('https://x.github.io/app/#join=team-code')).toBe(true);
+    await settle();
+
+    expect(auth.user?.isAnonymous).toBe(true);
+    expect(session.phase.value).toBe('choose-dancer');
+  });
+
+  it('refuses text without a code', () => {
+    const { session } = start();
+    expect(session.actions.joinWithLink('not a link')).toBe(false);
+    expect(session.phase.value).toBe('signed-out');
+  });
+});
+
+describe('freeing up a name', () => {
+  it('lets a captain release a dancer, so their other phone can pick them', async () => {
+    const access = fakeAccess({ captainUids: ['captain'] });
+    await access.access.join('safari', 'team-code', 'anonymous');
+    await access.access.claimDancer('safari', 'chris', null);
+    const { session } = start({ signedIn: captainUser, access });
+    await settle();
+    expect(session.claims.value).toEqual({ chris: 'safari' });
+
+    await session.actions.releaseDancer('chris');
+    await settle();
+
+    expect(session.claims.value).toEqual({});
+    expect(access.state.members.get('safari')?.dancerId).toBeNull();
+    await access.access.join('homeScreen', 'team-code', 'anonymous');
+    await expect(access.access.claimDancer('homeScreen', 'chris', null)).resolves.toBeUndefined();
   });
 });

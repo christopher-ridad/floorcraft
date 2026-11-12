@@ -9,6 +9,8 @@ import {
   type HeatSheetRepository,
   type Membership,
   type PreferencesStore,
+  type PushNotifications,
+  type PushStatus,
   type ScreenWakeLock,
   type SyncErrorCode,
   type SyncFailure,
@@ -19,6 +21,7 @@ import type { Dancer, Entries, FloorState, Partnership } from '../../src/domain/
 import { localRepository } from '../../src/infra/local/localRepository';
 import { memoryStorage } from '../../src/infra/storage/keyValueStorage';
 import { couples, entries, events, schedule } from '../domain/fixture';
+import { OFFICIAL_DATA_VERSION } from '../../src/domain/purdue';
 
 export const COMPETITION_ID = 'classic';
 
@@ -58,7 +61,14 @@ export function fixtureBackup({
     competitions: [
       {
         // The same day as the fixture's clock times (`at`).
-        info: { id: COMPETITION_ID, name: 'Classic', date: '2026-10-29', status: 'active' },
+        // Already up to date with the built-in data, so captains' phones leave the fixture alone.
+        info: {
+          id: COMPETITION_ID,
+          name: 'Classic',
+          date: '2026-10-29',
+          status: 'active',
+          officialVersion: OFFICIAL_DATA_VERSION,
+        },
         schedule: { items: schedule, events },
         entries: teamEntries,
         floor,
@@ -258,6 +268,7 @@ export function fakeAccess({
     joinCode,
     members: new Map<string, Membership>(),
     claims: new Map<string, string>(),
+    pushTokens: new Map<string, string>(),
   };
   const accessWatchers = new Map<(access: TeamAccess) => void, string>();
   const claimWatchers = new Set<(claims: Record<string, string>) => void>();
@@ -323,6 +334,12 @@ export function fakeAccess({
       state.members.set(uid, { ...member, dancerId });
       notify();
     },
+    async releaseDancer(dancerId, holderUid) {
+      state.claims.delete(dancerId);
+      const member = state.members.get(holderUid);
+      if (member) state.members.set(holderUid, { ...member, dancerId: null });
+      notify();
+    },
     async setProvider(uid, provider) {
       const member = state.members.get(uid);
       if (!member) return refuse();
@@ -332,6 +349,10 @@ export function fakeAccess({
     async setJoinCode(code) {
       state.joinCode = code;
       notify();
+    },
+
+    async savePushToken(uid, token) {
+      state.pushTokens.set(uid, token);
     },
   };
 
@@ -345,4 +366,22 @@ export function fakeAccess({
       notify();
     },
   };
+}
+
+/** Notifications on a phone: `status` is what the browser reports; `refuse` makes asking fail. */
+export function fakePush(initial: PushStatus = 'off', token = 'push-token') {
+  const control = { status: initial, refuse: false, asked: 0 };
+  const push: PushNotifications = {
+    status: () => control.status,
+    async getToken() {
+      control.asked++;
+      if (control.refuse) {
+        control.status = 'blocked';
+        throw new Error('Notifications were not allowed.');
+      }
+      control.status = 'on';
+      return token;
+    },
+  };
+  return { push, control };
 }

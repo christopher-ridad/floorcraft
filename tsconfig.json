@@ -24,6 +24,7 @@
     "e2e/**/*.ts",
     "*.config.ts",
     "*.config.mts",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "functions/src/**/*.ts"
   ]
 }

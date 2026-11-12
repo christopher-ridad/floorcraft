@@ -1,14 +1,17 @@
-import { effect, type ReadonlySignal } from '@preact/signals-core';
+import { effect, signal, type ReadonlySignal } from '@preact/signals-core';
 import { alertKey, nextAlert, type Alert } from '../domain/alerts';
 import type { Competition } from '../domain/competition';
 import type { NoticeChannel } from './notices';
-import type { AlertOutput } from './ports';
+import { minutesSinceMidnight } from '../domain/clock';
+import type { AlertOutput, Clock } from './ports';
 import type { Preferences } from './preferences';
 
 const ALERT_SIGNALS: Record<Alert['type'], { chimes: number; vibration: number[] }> = {
-  'heads-up': { chimes: 1, vibration: [250, 100, 250] },
   'on-deck': { chimes: 2, vibration: [300, 120, 300, 120, 300] },
+  'up-next': { chimes: 3, vibration: [400, 120, 400, 120, 400] },
 };
+/** How often to check the time, since a heat can come within 15 minutes with no floor change. */
+const RECHECK_MS = 30_000;
 const TEST_SIGNAL = { chimes: 2, vibration: [300, 120, 300] };
 
 interface AlertWatcherOptions {
@@ -16,6 +19,7 @@ interface AlertWatcherOptions {
   preferences: ReadonlySignal<Preferences>;
   output: AlertOutput;
   notices: NoticeChannel;
+  clock: Clock;
 }
 
 export interface AlertWatcher {
@@ -27,16 +31,19 @@ export interface AlertWatcher {
 }
 
 /**
- * Gives each alert once, whenever the floor or the preferences change. Changing who this phone
- * alerts for, or how early, starts over.
+ * Gives each alert once, checking whenever the floor or the preferences change and every 30
+ * seconds. Changing who this phone alerts for starts over.
  */
 export function watchAlerts({
   competition,
   preferences,
   output,
   notices,
+  clock,
 }: AlertWatcherOptions): AlertWatcher {
   const given = new Set<string>();
+  const tick = signal(0);
+  const timer = setInterval(() => tick.value++, RECHECK_MS);
   let lastTarget = '';
 
   const play = (signal: { chimes: number; vibration: number[] }) => {
@@ -45,16 +52,16 @@ export function watchAlerts({
     if (vibrate) output.vibrate(signal.vibration);
   };
 
-  const dispose = effect(() => {
-    const { dancer, alertThresholdHeats } = preferences.value;
-    const target = `${dancer}|${alertThresholdHeats}`;
-    if (target !== lastTarget) {
+  const stopWatching = effect(() => {
+    void tick.value;
+    const { dancer } = preferences.value;
+    if (dancer !== lastTarget) {
       given.clear();
-      lastTarget = target;
+      lastTarget = dancer;
     }
     const alert = nextAlert(
       competition.value,
-      { dancer, thresholdHeats: alertThresholdHeats },
+      { dancer, nowMinutes: minutesSinceMidnight(new Date(clock.now())) },
       given,
     );
     if (!alert) return;
@@ -66,6 +73,9 @@ export function watchAlerts({
   return {
     forgetGiven: () => given.clear(),
     playTest: () => play(TEST_SIGNAL),
-    dispose,
+    dispose() {
+      clearInterval(timer);
+      stopWatching();
+    },
   };
 }

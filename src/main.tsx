@@ -14,6 +14,7 @@ import { browserConnectivity } from './infra/platform/browserConnectivity';
 import { preferencesStorage } from './infra/platform/preferencesStorage';
 import { screenWakeLock } from './infra/platform/screenWakeLock';
 import { webAlertOutput } from './infra/platform/webAlertOutput';
+import { webPush } from './infra/platform/webPush';
 import { browserStorage } from './infra/storage/keyValueStorage';
 import { App } from './ui/App';
 import { createViewState } from './ui/viewState';
@@ -21,7 +22,7 @@ import { createViewState } from './ui/viewState';
 /** Team links look like `…/#join=<code>`. */
 const JOIN_LINK = /^#join=(.+)$/;
 
-const { auth, firestore } = connectFirebase({
+const { app, auth, firestore } = connectFirebase({
   config: FIREBASE_CONFIG,
   useEmulators: USE_EMULATORS,
 });
@@ -49,6 +50,8 @@ const session = createSession({
   joinCode: joinCode ? decodeURIComponent(joinCode) : null,
   // The code shouldn't stay in the address bar, where it could be shared by accident.
   onJoinCodeUsed: () => history.replaceState(null, '', location.pathname + location.search),
+  // Push needs the real Firebase project; the emulators can't send notifications.
+  push: webPush(app, { enabled: !USE_EMULATORS }),
 });
 const view = createViewState(storage);
 

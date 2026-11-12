@@ -37,9 +37,9 @@ export const offlineLabel = (pendingWrites: number) =>
 export function noticeText(notice: Notice): string {
   switch (notice.kind) {
     case 'alert':
-      return notice.alert.type === 'on-deck'
-        ? "You're on deck. Next heat is yours."
-        : `Heads up: you dance in ${notice.alert.heatsAway} heats.`;
+      return notice.alert.type === 'up-next'
+        ? "You're up next. Next heat is yours."
+        : `Get on deck: your heat is in about ${plural(notice.alert.minutesAway, 'minute')}.`;
     case 'save-failed':
       if (notice.code === 'read-only') {
         return 'You have view-only access, so this change was not saved. Ask the owner for edit access.';
@@ -60,7 +60,9 @@ export function sessionProblemText(problem: SessionProblem): string {
     case 'team-exists':
       return "The team couldn't be created. It may already exist: ask its captain to add you.";
     case 'dancer-taken':
-      return 'Someone else already picked that name. If it’s you on another phone, ask your captain to free it up.';
+      return 'Someone else already picked that name. If it’s you on another phone (or your Home Screen app), ask your captain to free it up in Setup → Names in use.';
+    case 'notifications-refused':
+      return 'Notifications are off for this app. Turn them on in your phone’s Settings, then try again.';
     case 'network':
       return "Couldn't reach the team. Check your connection and try again.";
   }

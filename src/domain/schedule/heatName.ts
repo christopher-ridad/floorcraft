@@ -1,7 +1,11 @@
 import type { DanceStyle, Round } from '../types';
 import { classifyDanceStyle } from './danceStyle';
 
-/** Round words as they appear in heat names. Checked in order, so `semi-final` wins over `final`. */
+/**
+ * Round words as they appear in heat names. The official schedule writes `2nd Round` and `Semi`;
+ * the older spellings are still read so schedules saved before it loaded keep working.
+ * Checked in order, so `semi-final` wins over `semi` and `final`.
+ */
 const ROUND_NAMES: readonly (readonly [string, Round])[] = [
   ['1st round', 1],
   ['first round', 1],
@@ -11,6 +15,7 @@ const ROUND_NAMES: readonly (readonly [string, Round])[] = [
   ['semi-final', 4],
   ['semi final', 4],
   ['semifinal', 4],
+  ['semi', 4],
   ['final', 5],
 ];
 

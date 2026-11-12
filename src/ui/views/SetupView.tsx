@@ -1,12 +1,12 @@
-import type { ComponentChildren } from 'preact';
-import { useState } from 'preact/hooks';
-import { ALERT_THRESHOLD_CHOICES, type Preferences } from '../../app/preferences';
-import { parsePartnershipRows } from '../../domain/entries/parsePartnershipRows';
-import { parseSchedule } from '../../domain/schedule/parseSchedule';
+import { useMemo, useState } from 'preact/hooks';
+import type { Preferences } from '../../app/preferences';
+import { ON_DECK_MINUTES } from '../../domain/alerts';
+import { isOfficialSchedule, PURDUE_CLASSIC } from '../../domain/purdue';
 import { DancerPicker } from '../components/DancerPicker';
+import { NotificationsCard } from '../components/NotificationsCard';
 import { useApp } from '../context';
 import { cx, plural } from '../format';
-import { AccountCard, BackupCard, TeamAccessCard } from './AccountCards';
+import { AccountCard, BackupCard, NamesInUseCard, TeamAccessCard } from './AccountCards';
 import { CouplesEditor } from './CouplesEditor';
 import styles from './SetupView.module.css';
 
@@ -16,6 +16,8 @@ export function SetupView() {
     <>
       <h2>This phone</h2>
       <PhoneSettings />
+      <h2>Notifications</h2>
+      <NotificationsCard />
       <h2>Account</h2>
       <AccountCard />
       {session.isCaptain.value && <CaptainSetup />}
@@ -29,14 +31,14 @@ function CaptainSetup() {
     <>
       <h2>Team link</h2>
       <TeamAccessCard />
+      <h2>Names in use</h2>
+      <NamesInUseCard />
       <h2>Sync</h2>
       <SyncStatus />
       <h2>Couples & entries</h2>
       <CouplesEditor />
-      <h2>Day-of schedule</h2>
-      <ScheduleImport />
-      <h2>Partnerships</h2>
-      <PartnershipsImport />
+      <h2>Schedule</h2>
+      <OfficialScheduleCard />
       <h2>Backup</h2>
       <BackupCard />
       <h2>Reset</h2>
@@ -66,28 +68,13 @@ function PreferenceSwitch({ name, label }: { name: SwitchPreference; label: stri
 
 function PhoneSettings() {
   const { store, view } = useApp();
-  const { alertThresholdHeats } = store.preferences.value;
   return (
     <div class="card">
       <DancerPicker id="iAm" label="I am" emptyOption="Not set" />
-      <label class={cx('field', styles.spaced)} for="alertThreshold">
-        Warn me when my heat is this close
-        <select
-          id="alertThreshold"
-          value={alertThresholdHeats}
-          onChange={(event) =>
-            store.actions.updatePreferences({
-              alertThresholdHeats: Number(event.currentTarget.value),
-            })
-          }
-        >
-          {ALERT_THRESHOLD_CHOICES.map((heats) => (
-            <option key={heats} value={heats}>
-              {plural(heats, 'heat')} away
-            </option>
-          ))}
-        </select>
-      </label>
+      <p class={cx('muted', styles.spaced)}>
+        You're told to get on deck when your heat is about {ON_DECK_MINUTES} minutes away, and again
+        when you're up next.
+      </p>
       <PreferenceSwitch name="chime" label="Chime" />
       <PreferenceSwitch name="vibrate" label="Vibrate (Android)" />
       <PreferenceSwitch name="keepScreenAwake" label="Keep screen awake" />
@@ -96,7 +83,7 @@ function PhoneSettings() {
           class="btn small"
           onClick={() => {
             store.actions.testAlert();
-            view.showToast("This is what you'll hear when you're on deck.");
+            view.showToast("This is what you'll hear when it's time to get on deck.");
           }}
         >
           Test the alert
@@ -129,110 +116,61 @@ function SyncStatus() {
   );
 }
 
-interface ImportCardProps {
-  id: string;
-  label: string;
-  help: ComponentChildren;
-  placeholder: string;
-  button: string;
-  /** How many things the text contains, for the live preview. */
-  count(text: string): number;
-  noun: string;
-  /** Imports the text; returns the message to show. */
-  submit(text: string): string;
-}
+/** Whether the schedule is the official one, and loading it if not. */
+function OfficialScheduleCard() {
+  const { store, view } = useApp();
+  const [isConfirming, setConfirming] = useState(false);
+  const items = store.schedule.value;
+  const isOfficial = useMemo(() => isOfficialSchedule(items), [items]);
 
-/** A paste box that previews what it found and replaces data on submit. */
-function ImportCard({
-  id,
-  label,
-  help,
-  placeholder,
-  button,
-  count,
-  noun,
-  submit,
-}: ImportCardProps) {
-  const { view } = useApp();
-  const [text, setText] = useState('');
-  const found = count(text);
+  const load = () => {
+    const { heats, droppedEntries } = store.actions.loadOfficialSchedule();
+    setConfirming(false);
+    view.showToast(
+      droppedEntries
+        ? `Official schedule loaded: ${heats} heats. ${plural(droppedEntries, 'entry', 'entries')} for events not on it; see Couples & entries.`
+        : `Official schedule loaded: ${heats} heats.`,
+    );
+  };
+
+  if (isOfficial) {
+    return (
+      <div class="card">
+        <b class="ok">This is the official schedule.</b>{' '}
+        <span class="muted">
+          If the day changes, fix a heat's time or name from the Schedule tab.
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div class="card stack">
-      <span class={cx('muted', styles.help)}>{help}</span>
-      <textarea
-        id={id}
-        aria-label={label}
-        placeholder={placeholder}
-        value={text}
-        onInput={(event) => setText(event.currentTarget.value)}
-      />
-      <div class="row">
-        <button
-          class="btn primary"
-          onClick={() => {
-            const message = submit(text);
-            if (count(text)) setText('');
-            view.showToast(message);
-          }}
-        >
-          {button}
-        </button>
-        <span class={cx('muted', styles.preview)}>{found ? `${found} ${noun} found` : ''}</span>
-      </div>
+      <span class={cx('muted', styles.help)}>
+        {items.length
+          ? "This isn't the official schedule: it's an older one, or it has day-of edits."
+          : 'No schedule is loaded yet.'}{' '}
+        Loading the official {PURDUE_CLASSIC.name} schedule keeps couples' entries and recall marks
+        with their events.
+      </span>
+      {isConfirming ? (
+        <div class="row">
+          <span class="bad">Replace every line, including any edits, and clear the floor?</span>
+          <button class="btn small primary" onClick={load}>
+            Load it
+          </button>
+          <button class="btn small" onClick={() => setConfirming(false)}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div>
+          <button class="btn primary" onClick={() => (items.length ? setConfirming(true) : load())}>
+            Load the official schedule
+          </button>
+        </div>
+      )}
     </div>
-  );
-}
-
-function ScheduleImport() {
-  const { store } = useApp();
-  return (
-    <ImportCard
-      id="scheduleText"
-      label="Schedule text"
-      help={
-        <>
-          When the real schedule is posted, copy the heat list (from the PDF or live.o2cm.com) and
-          paste it here. One heat per line, like{' '}
-          <span class="mono">9:39 AM [4] Newcomer Amer. Waltz 1st Round</span>. Couples are
-          re-matched automatically and recall marks are kept.
-        </>
-      }
-      placeholder={
-        '8:37 AM [1] Bronze Amer. Smooth 1st Round (WT)\n8:48 AM [2] Bronze Amer. Smooth 1st Round (FV)'
-      }
-      button="Replace schedule"
-      noun="heats"
-      count={(text) => parseSchedule(text).items.filter((item) => item.kind === 'heat').length}
-      submit={(text) => {
-        const heats = store.actions.importSchedule(text);
-        return heats
-          ? `Schedule replaced: ${heats} heats.`
-          : 'No heats found. Each line needs a time and an event number in brackets.';
-      }}
-    />
-  );
-}
-
-function PartnershipsImport() {
-  const { store } = useApp();
-  return (
-    <ImportCard
-      id="partnershipsText"
-      label="Partnerships text"
-      help="Paste rows from the partnerships spreadsheet: lead, follow, level, then events separated by commas. This replaces every couple."
-      placeholder={'Chris\tBrooke\tBronze\tBronze I. Standard (WQ), Bronze A. Smooth (WT)'}
-      button="Replace couples"
-      noun="couples"
-      count={(text) => parsePartnershipRows(text).length}
-      submit={(text) => {
-        const { couples, unmatched } = store.actions.importEntries(text);
-        if (!couples)
-          return 'No couples found. Each line needs a lead, a follow and at least one event.';
-        if (!unmatched.length) return `${couples} couples loaded.`;
-        const missed = unmatched.map(({ lead, entry }) => `${lead}: ${entry}`).join('; ');
-        return `${couples} couples loaded. Not on the schedule, add by hand: ${missed}`;
-      }}
-    />
   );
 }
 
@@ -262,7 +200,7 @@ function ResetLiveTracking() {
           <button class="btn danger" onClick={() => setConfirming(true)}>
             Clear live tracking
           </button>
-          <span class={cx('muted', styles.preview)}>Use before the next competition.</span>
+          <span class={cx('muted', styles.preview)}>Use after a practice run.</span>
         </>
       )}
     </div>

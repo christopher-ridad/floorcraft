@@ -61,6 +61,7 @@ const toCompetition = (id: string, data: Data): CompetitionInfo => ({
   name: text(data.name),
   date: text(data.date),
   status: STATUSES.find((status) => status === data.status) ?? 'setup',
+  ...(typeof data.officialVersion === 'number' ? { officialVersion: data.officialVersion } : {}),
 });
 const toMark = (data: Data): CallbackMark | null =>
   [1, 2, 3, 4, 5].includes(data.reachedRound)
@@ -281,8 +282,15 @@ export function firestoreRepository({
         ),
       ),
 
-    saveCompetition: ({ id, name, date, status }) =>
-      write(() => setDoc(doc(firestore, competitionPath(id)), { name, date, status })),
+    saveCompetition: ({ id, name, date, status, officialVersion }) =>
+      write(() =>
+        setDoc(doc(firestore, competitionPath(id)), {
+          name,
+          date,
+          status,
+          ...(officialVersion === undefined ? {} : { officialVersion }),
+        }),
+      ),
 
     saveSchedule: (competitionId, { items, events }) =>
       write(() =>

@@ -27,7 +27,6 @@ export async function seedTeam() {
 
   const { backup } = backupFromLegacy(
     { schedule: legacy('schedule'), entries: legacy('entries') },
-    { name: 'Purdue Ballroom Classic', date: '2026-11-14', status: 'active' },
     () => crypto.randomUUID(),
   );
   const competition = backup.competitions[0];

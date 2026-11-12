@@ -188,7 +188,6 @@ describe('Firestore repository', () => {
       );
     const { backup } = backupFromLegacy(
       { schedule: read('schedule'), entries: read('entries') },
-      { name: 'Purdue Ballroom Classic', date: '2026-11-14', status: 'active' },
       () => crypto.randomUUID(),
     );
     const [migrated] = backup.competitions;

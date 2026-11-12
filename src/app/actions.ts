@@ -5,13 +5,20 @@ import type { Competition } from '../domain/competition';
 import { parsePartnershipRows } from '../domain/entries/parsePartnershipRows';
 import { advanceFloor, markOnFloor, moveFloorBack } from '../domain/floor';
 import {
+  isOfficialSchedule,
+  OFFICIAL_DATA_VERSION,
+  OFFICIAL_PARTNERSHIPS_TEXT,
+  officialSchedule,
+  PURDUE_CLASSIC,
+} from '../domain/purdue';
+import { buildEventCatalog } from '../domain/schedule/eventCatalog';
+import {
   identifyEvents,
   toScheduleLines,
   type ScheduleLine,
 } from '../domain/schedule/identifyEvents';
-import { parseSchedule } from '../domain/schedule/parseSchedule';
-import { createDancerDirectory, importPartnerships, type UnmatchedEntry } from '../domain/team';
-import type { CompetitionInfo, IdFactory, LiveState, Partnership } from '../domain/types';
+import { createDancerDirectory, importPartnerships } from '../domain/team';
+import type { CompetitionInfo, IdFactory, LiveState, Partnership, Schedule } from '../domain/types';
 import { BACKUP_FORMAT, BACKUP_VERSION, type TeamBackup } from './backup';
 import type {
   Clock,
@@ -44,10 +51,10 @@ export interface ActionContext {
 
 export type EditResult = 'saved' | 'invalid-time' | 'not-found';
 
-export interface EntriesImportResult {
-  couples: number;
-  /** Entries that match no event on the schedule; the captain adds those by hand. */
-  unmatched: UnmatchedEntry[];
+export interface OfficialScheduleResult {
+  heats: number;
+  /** Couples' entries for events that aren't on the official schedule. */
+  droppedEntries: number;
 }
 
 export type Actions = ReturnType<typeof createActions>;
@@ -103,20 +110,66 @@ export function createActions(ctx: ActionContext) {
     save(repository.savePartnerships([updated]));
   }
 
+  function writeOfficialData(info: CompetitionInfo, current: Schedule) {
+    const isOfficial = isOfficialSchedule(current.items);
+    const schedule = isOfficial
+      ? current
+      : officialSchedule({ previousEvents: current.events, createId: ctx.createId });
+    if (!isOfficial) {
+      // Every line is new, so the floor position no longer points at anything.
+      if (ctx.competitionData.peek().floor.currentItemId && info.id === competitionId()) {
+        save(repository.saveFloor(info.id, { currentItemId: null, currentSetAt: null }));
+      }
+      save(repository.saveSchedule(info.id, schedule));
+    }
+
+    const roster = importPartnerships(
+      parsePartnershipRows(OFFICIAL_PARTNERSHIPS_TEXT),
+      ctx.team.peek(),
+      buildEventCatalog(schedule.events),
+      ctx.createId,
+    );
+    save(repository.saveDancers(roster.dancers));
+    save(repository.savePartnerships(roster.partnerships));
+    save(
+      repository.saveEntries(
+        info.id,
+        Object.fromEntries(
+          roster.partnerships.map((partnership) => [
+            partnership.id,
+            roster.entries[partnership.id] ?? [],
+          ]),
+        ),
+      ),
+    );
+    save(repository.saveCompetition({ ...info, officialVersion: OFFICIAL_DATA_VERSION }));
+  }
+
   return {
-    // ---- Competitions ----
+    // ---- The competition ----
 
     /**
-     * Creates a competition and makes it the one everyone sees; the previous one is archived.
-     * Returns the new competition's id.
+     * Sets up the Purdue Ballroom Classic with its official schedule, partnerships and entries, for
+     * a team that was just created. Returns the competition's id.
      */
-    startCompetition(name: string, date: string): string {
-      const id = ctx.createId();
-      const previous = ctx.activeCompetition.peek();
-      if (previous) save(repository.saveCompetition({ ...previous, status: 'archived' }));
-      save(repository.saveCompetition({ id, name: name.trim(), date, status: 'active' }));
-      save(repository.updateTeam({ activeCompetitionId: id }));
-      return id;
+    setUpCompetition(): string {
+      const info: CompetitionInfo = { id: ctx.createId(), ...PURDUE_CLASSIC, status: 'active' };
+      writeOfficialData(info, { items: [], events: [] });
+      save(repository.updateTeam({ activeCompetitionId: info.id }));
+      return info.id;
+    },
+
+    /**
+     * Brings the competition up to the built-in data: the official schedule (unless it already is
+     * the official one), and the team's official partnerships and entries. Dancers, partnerships
+     * and events that already exist keep their ids, so callbacks and phones' names stay attached.
+     * Returns false when there's no competition to update.
+     */
+    applyOfficialData(): boolean {
+      const info = ctx.activeCompetition.peek();
+      if (!info) return false;
+      writeOfficialData(info, ctx.competitionData.peek().schedule);
+      return true;
     },
 
     // ---- Backups ----
@@ -207,22 +260,30 @@ export function createActions(ctx: ActionContext) {
     // ---- The schedule ----
 
     /**
-     * Replaces the schedule with pasted text. Events that match the old schedule keep their ids,
-     * so entries and callback marks stay attached. Clears the floor position.
-     * Returns the number of heats found; nothing changes when there are none.
+     * Replaces the schedule with the official one. Events that match the current schedule keep
+     * their ids, so entries and callback marks stay attached. Clears the floor position, since
+     * every line is new.
      */
-    importSchedule(text: string): number {
+    loadOfficialSchedule(): OfficialScheduleResult {
       const id = competitionId();
-      if (!id) return 0;
-      const schedule = parseSchedule(text, {
+      if (!id) return { heats: 0, droppedEntries: 0 };
+      const schedule = officialSchedule({
         previousEvents: ctx.competitionData.peek().schedule.events,
         createId: ctx.createId,
       });
-      const heatCount = schedule.items.filter((item) => item.kind === 'heat').length;
-      if (!heatCount) return 0;
       save(repository.saveFloor(id, { currentItemId: null, currentSetAt: null }));
       save(repository.saveSchedule(id, schedule));
-      return heatCount;
+
+      const eventIds = new Set(schedule.events.map((event) => event.eventId));
+      const coupleIds = new Set(competition.peek().couples.map((couple) => couple.id));
+      const droppedEntries = Object.entries(ctx.competitionData.peek().entries)
+        .filter(([coupleId]) => coupleIds.has(coupleId))
+        .flatMap(([, ids]) => ids)
+        .filter((eventId) => !eventIds.has(eventId)).length;
+      return {
+        heats: schedule.items.filter((item) => item.kind === 'heat').length,
+        droppedEntries,
+      };
     },
 
     /** Saves a schedule line from its time and `[event] name` (a heat) or plain text (a break). */
@@ -276,33 +337,6 @@ export function createActions(ctx: ActionContext) {
     },
 
     // ---- Couples and entries ----
-
-    /**
-     * Sets the team's partnerships and this competition's entries from pasted spreadsheet rows.
-     * Partnerships not in the rows become inactive. Nothing changes when no rows are found.
-     */
-    importEntries(text: string): EntriesImportResult {
-      const id = competitionId();
-      const rows = parsePartnershipRows(text);
-      if (!id || !rows.length) return { couples: 0, unmatched: [] };
-
-      const result = importPartnerships(
-        rows,
-        ctx.team.peek(),
-        competition.peek().events,
-        ctx.createId,
-      );
-      const entries = Object.fromEntries(
-        result.partnerships.map((partnership) => [
-          partnership.id,
-          result.entries[partnership.id] ?? [],
-        ]),
-      );
-      save(repository.saveDancers(result.dancers));
-      save(repository.savePartnerships(result.partnerships));
-      save(repository.saveEntries(id, entries));
-      return { couples: rows.length, unmatched: result.unmatched };
-    },
 
     /** Adds a partnership with no events. Returns its id, or null without a lead's name. */
     addCouple(lead: string, follow: string): string | null {

@@ -102,10 +102,12 @@ describe('Schedule tab', () => {
 });
 
 describe('People tab', () => {
-  it('shows each dancer’s day, and follows one on this device', async () => {
+  it('lists everyone’s heat counts, and makes one this device’s schedule', async () => {
     const { user, store } = renderApp({ tab: 'people' });
+    expect(screen.getByRole('button', { name: /^Brooke\s*13 for sure/ })).toBeTruthy();
+    expect(document.querySelectorAll('[data-heat-row]')).toHaveLength(0);
+
     await user.click(screen.getByRole('button', { name: /^Brooke/ }));
-    expect(screen.getByRole('heading', { name: /Brooke's day · 13 for sure/ })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: "I'm Brooke" }));
     expect(store.preferences.value.dancer).toBe('Brooke');

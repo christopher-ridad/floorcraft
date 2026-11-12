@@ -1,8 +1,9 @@
 rules_version = '2';
 
 // Access rules for the heat sheet. See docs/design/firebase-competitions.md.
-//   Captains (Google accounts listed in the team's captainUids) set everything up.
-//   Members (phones that joined with the join code) read everything and update live tracking.
+//   There's one team, and the team link (its join code) is the key: every phone that joined with
+//   it reads everything and can set everything up. No accounts.
+//   Captains (the team's creator, in captainUids) additionally replace the join code.
 //   Nobody else can read or write anything.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -10,7 +11,6 @@ service cloud.firestore {
     function teamDoc(t)        { return /databases/$(database)/documents/teams/$(t); }
     function teamPath(t, rest) { return path('/databases/' + database + '/documents/teams/' + t + '/' + rest); }
     function signedIn()        { return request.auth != null; }
-    function isGoogle()        { return request.auth.token.firebase.sign_in_provider == 'google.com'; }
     function isCaptain(t)      { return signedIn() && exists(teamDoc(t)) && request.auth.uid in get(teamDoc(t)).data.captainUids; }
     function isMember(t)       { return signedIn() && exists(teamPath(t, 'members/' + request.auth.uid)); }
     function canRead(t)        { return isCaptain(t) || isMember(t); }
@@ -19,19 +19,21 @@ service cloud.firestore {
 
     match /teams/{t} {
       allow read: if canRead(t);
-      // First run only: the Google account that creates the team becomes its only captain.
-      // Afterwards the document exists, so `create` can never succeed again.
-      allow create: if signedIn() && isGoogle()
+      // First run only: the phone that creates the team becomes its captain. Afterwards the
+      // document exists, so `create` can never succeed again.
+      allow create: if signedIn()
         && request.resource.data.captainUids == [request.auth.uid];
-      // Captains edit the team, including who the captains are, but never remove the last one.
-      allow update: if isCaptain(t)
+      // Anyone on the team edits it; only captains change who the captains are, and never to none.
+      allow update: if canRead(t)
         && request.resource.data.captainUids is list
-        && request.resource.data.captainUids.size() > 0;
+        && request.resource.data.captainUids.size() > 0
+        && (isCaptain(t) || request.resource.data.captainUids == resource.data.captainUids);
       allow delete: if false;
 
-      // The join code. Members never see it directly.
+      // The join code: everyone on the team can share the link; only captains replace it.
       match /private/{doc} {
-        allow read, write: if isCaptain(t);
+        allow read: if canRead(t);
+        allow write: if isCaptain(t);
       }
 
       match /members/{uid} {
@@ -44,10 +46,14 @@ service cloud.firestore {
           && (isCaptain(t)
               || request.resource.data.joinCode == get(teamPath(t, 'private/join')).data.code);
         // A member may only link themselves to a dancer they hold the claim for (or unlink).
+        // Anyone on the team may unlink another phone from its dancer, to free up the name.
         allow update: if isCaptain(t) || (signedIn() && request.auth.uid == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dancerId', 'provider'])
           && (request.resource.data.dancerId == null
-              || getAfter(teamPath(t, 'claims/' + request.resource.data.dancerId)).data.uid == uid));
+              || getAfter(teamPath(t, 'claims/' + request.resource.data.dancerId)).data.uid == uid))
+          || (canRead(t)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dancerId'])
+              && request.resource.data.dancerId == null);
         allow delete: if isCaptain(t) || (signedIn() && request.auth.uid == uid);
       }
 
@@ -68,31 +74,32 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(['uid'])
           && request.resource.data.uid == request.auth.uid
           && exists(teamPath(t, 'dancers/' + dancerId));
-        allow delete: if isCaptain(t) || (signedIn() && resource.data.uid == request.auth.uid);
+        // Anyone on the team can free up a name.
+        allow delete: if canRead(t);
       }
 
       match /dancers/{id} {
         allow read: if canRead(t);
-        allow write: if isCaptain(t);
+        allow write: if canRead(t);
       }
 
       match /partnerships/{id} {
         allow read: if canRead(t);
-        allow write: if isCaptain(t);
+        allow write: if canRead(t);
       }
 
       match /competitions/{c} {
         allow read: if canRead(t);
-        allow write: if isCaptain(t);
+        allow write: if canRead(t);
 
         match /schedule/{doc} {
           allow read: if canRead(t);
-          allow write: if isCaptain(t);
+          allow write: if canRead(t);
         }
 
         match /entries/{partnershipId} {
           allow read: if canRead(t);
-          allow write: if isCaptain(t);
+          allow write: if canRead(t);
         }
 
         // Live tracking: anyone on the team, only for the active competition, and every write
@@ -100,7 +107,7 @@ service cloud.firestore {
         match /live/{doc} {
           allow read: if canRead(t);
           allow create, update: if canRead(t) && isActive(t, c) && signedBySelf();
-          allow delete: if isCaptain(t);
+          allow delete: if canRead(t);
         }
 
         match /callbacks/{key} {

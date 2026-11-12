@@ -140,7 +140,7 @@ export interface AccessRepository {
   setJoinCode(joinCode: string): Promise<void>;
   /**
    * Frees a dancer's name so another phone can pick it (e.g. the same person on their Home Screen
-   * app). Captains only.
+   * app).
    */
   releaseDancer(dancerId: string, holderUid: string): Promise<void>;
   /** Stores where to send this phone's notifications. */
@@ -204,13 +204,7 @@ export interface AuthUser {
   email: string | null;
 }
 
-export type AuthErrorCode =
-  /** The person closed the sign-in window. */
-  | 'cancelled'
-  /** That Google account is already used by another phone or person. */
-  | 'account-in-use'
-  | 'network'
-  | 'unknown';
+export type AuthErrorCode = 'network' | 'unknown';
 
 export class AuthFailure extends Error {
   constructor(
@@ -225,11 +219,7 @@ export class AuthFailure extends Error {
 export interface AuthService {
   /** Calls `listener` with the current user (null when signed out), then on every change. */
   onUserChange(listener: (user: AuthUser | null) => void): () => void;
-  /** Signs in with Google. Captains always use this. Rejects with AuthFailure. */
-  signInWithGoogle(): Promise<void>;
   /** Signs this phone in without an account, for joining with the team link. */
   signInAnonymously(): Promise<AuthUser>;
-  /** Turns this phone's anonymous sign-in into a Google account, keeping the same user id. */
-  linkWithGoogle(): Promise<void>;
   signOut(): Promise<void>;
 }

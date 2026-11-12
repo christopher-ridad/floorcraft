@@ -28,12 +28,7 @@ export type SessionPhase =
 
 /** Something the person tried that didn't work; the UI words it. */
 export type SessionProblem =
-  | 'sign-in-failed'
-  | 'account-in-use'
-  | 'team-exists'
-  | 'dancer-taken'
-  | 'notifications-refused'
-  | 'network';
+  'sign-in-failed' | 'team-exists' | 'dancer-taken' | 'notifications-refused' | 'network';
 
 export interface SessionDependencies {
   auth: AuthService;
@@ -65,7 +60,6 @@ export function joinCodeFromLink(text: string): string | null {
 }
 
 const problemFor = (error: unknown): SessionProblem => {
-  if (error instanceof AuthFailure && error.code === 'account-in-use') return 'account-in-use';
   if (error instanceof AuthFailure) return 'sign-in-failed';
   return 'network';
 };
@@ -90,6 +84,8 @@ export function createSession(deps: SessionDependencies) {
     teamAccess.value?.kind === 'team' ? teamAccess.value.membership : null,
   );
   const isCaptain = computed(() => teamAccess.value?.kind === 'team' && teamAccess.value.isCaptain);
+  /** Everyone on the team sets things up: the team link is the only key. */
+  const canSetUp = computed(() => teamAccess.value?.kind === 'team');
 
   const phase = computed<SessionPhase>(() => {
     if (joinState.value === 'joining') return 'joining';
@@ -153,9 +149,7 @@ export function createSession(deps: SessionDependencies) {
     if (!stopTeamWatchers.length) {
       store.start();
       stopTeamWatchers.push(access.watchClaims((value) => (claims.value = value)));
-      if (next.isCaptain) {
-        stopTeamWatchers.push(access.watchJoinCode((value) => (joinCode.value = value)));
-      }
+      stopTeamWatchers.push(access.watchJoinCode((value) => (joinCode.value = value)));
     }
     if (next.isCaptain && !next.membership) {
       access.joinAsCaptain(signedIn.uid).catch(() => (problem.value = 'network'));
@@ -193,16 +187,15 @@ export function createSession(deps: SessionDependencies) {
   }
 
   /**
-   * When a captain's phone finds the competition behind the built-in schedule and partnerships,
+   * When a phone on the team finds the competition behind the built-in schedule and partnerships,
    * it writes them, once per version, so every phone shows the team's dances with nothing to paste.
-   * (Only captains can write them; members see them as soon as a captain has opened the app.)
    */
   function applyOfficialDataOnce() {
     let appliedTo: string | null = null;
     return effect(() => {
       const info = store.activeCompetition.value;
       const { team, competition } = store.loaded.value;
-      if (!isCaptain.value || !team || !competition || !info) return;
+      if (!canSetUp.value || !team || !competition || !info) return;
       const key = `${info.id}@${OFFICIAL_DATA_VERSION}`;
       if ((info.officialVersion ?? 0) >= OFFICIAL_DATA_VERSION || appliedTo === key) return;
       appliedTo = key;
@@ -246,20 +239,21 @@ export function createSession(deps: SessionDependencies) {
   }
 
   const actions = {
-    /** Captains sign in with Google. */
-    signInAsCaptain: () => attempt(() => auth.signInWithGoogle()),
-
     /**
-     * Creates the team with this Google account as captain, and sets up the Purdue Ballroom
-     * Classic with its official schedule, partnerships and entries. Fails with `team-exists` if the team can't be created
-     * (usually: someone already did).
+     * First-time setup: creates the team with this phone as its captain, and sets up the Purdue
+     * Ballroom Classic with its official schedule, partnerships and entries. Fails with
+     * `team-exists` if the team can't be created (usually: it already exists).
      */
     async createTeam(teamName: string) {
       problem.value = null;
-      const signedIn = user.peek();
-      if (!signedIn || signedIn.isAnonymous) {
-        problem.value = 'sign-in-failed';
-        return;
+      let signedIn = user.peek();
+      if (!signedIn) {
+        try {
+          signedIn = await auth.signInAnonymously();
+        } catch {
+          problem.value = 'sign-in-failed';
+          return;
+        }
       }
       try {
         await access.createTeam(signedIn.uid, teamName.trim(), createJoinCode());
@@ -304,14 +298,6 @@ export function createSession(deps: SessionDependencies) {
     },
 
     /** Keeps this member's identity on any device by linking a Google account. */
-    linkWithGoogle: () =>
-      attempt(async () => {
-        const signedIn = user.peek();
-        if (!signedIn) return;
-        await auth.linkWithGoogle();
-        await access.setProvider(signedIn.uid, 'google');
-      }),
-
     signOut: () => attempt(() => auth.signOut()),
 
     /**
@@ -341,7 +327,7 @@ export function createSession(deps: SessionDependencies) {
         }
       }),
 
-    /** Frees a dancer's name so they can pick it on another phone. Captains only. */
+    /** Frees a dancer's name so they can pick it on another phone. */
     releaseDancer: (dancerId: string) =>
       attempt(async () => {
         const holder = claims.peek()[dancerId];
@@ -357,6 +343,7 @@ export function createSession(deps: SessionDependencies) {
     user: computed(() => user.value ?? null),
     membership,
     isCaptain,
+    canSetUp,
     claims,
     joinCode,
     problem,

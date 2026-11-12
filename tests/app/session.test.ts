@@ -179,21 +179,23 @@ describe('picking a name', () => {
 });
 
 describe('captains', () => {
-  it('sign in with Google', async () => {
-    const access = fakeAccess({ captainUids: ['google-user'] });
-    const { session } = start({ access });
-    await session.actions.signInAsCaptain();
+  it('create the team from a fresh phone, signing it in first', async () => {
+    const access = fakeAccess({ teamExists: false });
+    const { session, auth } = start({ access });
+    expect(session.phase.value).toBe('signed-out');
+
+    await session.actions.createTeam('Purdue Ballroom');
     await settle();
 
-    expect(session.isCaptain.value).toBe(true);
-    expect(session.membership.value).toMatchObject({ uid: 'google-user', provider: 'google' });
-    expect(session.joinCode.value).toBe('team-code');
+    expect(auth.user?.isAnonymous).toBe(true);
+    expect(access.state.captainUids).toEqual([auth.user?.uid]);
+    expect(session.canSetUp.value).toBe(true);
   });
 
-  it('see why Google sign-in failed', async () => {
-    const { session, auth } = start();
-    auth.control.failSignIn = new AuthFailure('cancelled');
-    await session.actions.signInAsCaptain();
+  it('see why signing in failed', async () => {
+    const { session, auth } = start({ access: fakeAccess({ teamExists: false }) });
+    auth.control.failSignIn = new AuthFailure('network');
+    await session.actions.createTeam('Purdue Ballroom');
     expect(session.problem.value).toBe('sign-in-failed');
   });
 
@@ -244,19 +246,31 @@ describe('captains', () => {
     expect(backend.writes).toHaveLength(writes);
   });
 
-  it('leave an older competition alone on a member’s phone', async () => {
+  it('bring an older competition up to date on any member’s phone too', async () => {
     const access = fakeAccess();
     await access.access.join('phone', 'team-code', 'anonymous');
-    const { store, backend } = start({
+    const { store } = start({
       signedIn: anonymousPhone('phone'),
       access,
       isOutdated: true,
     });
     await settle();
 
-    expect(store.loaded.value.competition).toBe(true);
-    expect(store.activeCompetition.value?.officialVersion).toBeUndefined();
-    expect(backend.writes).toEqual([]);
+    expect(store.activeCompetition.value?.officialVersion).toBe(OFFICIAL_DATA_VERSION);
+    expect(store.couples.value).toHaveLength(21);
+  });
+
+  it('give two phones applying it at once the same new records', async () => {
+    const ids = async () => {
+      const access = fakeAccess({ captainUids: ['captain'] });
+      const { store } = start({ signedIn: captainUser, access, isOutdated: true });
+      await settle();
+      const names = new Map(store.team.value.dancers.map((d) => [d.id, d.name]));
+      return store.couples.value
+        .map((c) => `${c.id}:${c.lead}&${c.follow}`)
+        .concat([...names.keys()]);
+    };
+    expect(await ids()).toEqual(await ids());
   });
 
   it('cannot create a team that already exists', async () => {
@@ -292,21 +306,6 @@ describe('leaving', () => {
 
     expect(session.phase.value).toBe('signed-out');
     expect(store.loaded.value.team).toBe(false);
-  });
-
-  it('keeps a member’s identity by linking Google', async () => {
-    const { session, access } = start({ joinCode: 'team-code' });
-    await settle();
-    await session.actions.linkWithGoogle();
-    expect(access.state.members.get('phone-1')?.provider).toBe('google');
-  });
-
-  it('explains when that Google account is already in use', async () => {
-    const { session, auth } = start({ joinCode: 'team-code' });
-    await settle();
-    auth.control.failSignIn = new AuthFailure('account-in-use');
-    await session.actions.linkWithGoogle();
-    expect(session.problem.value).toBe('account-in-use');
   });
 });
 

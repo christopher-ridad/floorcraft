@@ -3,6 +3,8 @@
 Status: agreed · 2026-11-02 · Purdue (Nov 14) runs on Firebase
 
 > **Update, 2026-11-11: Purdue only.** The app is now specific to the Purdue Ballroom Classic. The official 2026 schedule is built in ([src/domain/purdue.ts](../../src/domain/purdue.ts)) and replaces schedule pasting; team creation sets up that one competition; competition creation and archiving, the general schedule parser, the event review flag, and the after-Purdue milestones 6 and 7 are dropped. The Firestore layout and rules below are unchanged, so existing data needs no migration: the competition is still one document under `competitions/`, pointed to by `activeCompetitionId`. Sections below that describe the dropped features are kept as history.
+>
+> **Update, 2026-11-12: no accounts.** Google sign-in is removed. The team link is the only key: every phone that joins with it can set everything up; captains (the team's creator) only replace the join code. The team is created once at `#setup`.
 
 ## Summary
 

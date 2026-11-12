@@ -65,11 +65,4 @@ describe('Firebase auth service', () => {
     await service.signOut();
     expect(await reported).toBeNull();
   });
-
-  it('refuses to link a Google account when not signed in', async () => {
-    await expect(service.linkWithGoogle()).rejects.toMatchObject({
-      name: 'AuthFailure',
-      code: 'unknown',
-    });
-  });
 });

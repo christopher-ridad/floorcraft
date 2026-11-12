@@ -198,18 +198,12 @@ export function fakeWakeLock(grants: boolean) {
 
 export const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-/** Sign-in for tests. Google sign-in uses `googleUser`; anonymous sign-ins get fresh ids. */
+/** Sign-in for tests. Anonymous sign-ins get fresh ids; `failSignIn` makes signing in fail. */
 export function fakeAuth({ signedIn = null as AuthUser | null } = {}) {
   let user = signedIn;
   let anonymousCount = 0;
   const listeners = new Set<(user: AuthUser | null) => void>();
   const control = {
-    googleUser: {
-      uid: 'google-user',
-      isAnonymous: false,
-      displayName: 'Casey',
-      email: 'casey@example.com',
-    } as AuthUser,
     failSignIn: null as AuthFailure | null,
   };
   const setUser = (next: AuthUser | null) => {
@@ -222,11 +216,8 @@ export function fakeAuth({ signedIn = null as AuthUser | null } = {}) {
       listener(user);
       return () => listeners.delete(listener);
     },
-    async signInWithGoogle() {
-      if (control.failSignIn) throw control.failSignIn;
-      setUser(control.googleUser);
-    },
     async signInAnonymously() {
+      if (control.failSignIn) throw control.failSignIn;
       const next = {
         uid: `phone-${++anonymousCount}`,
         isAnonymous: true,
@@ -235,10 +226,6 @@ export function fakeAuth({ signedIn = null as AuthUser | null } = {}) {
       };
       setUser(next);
       return next;
-    },
-    async linkWithGoogle() {
-      if (control.failSignIn) throw control.failSignIn;
-      if (user) setUser({ ...user, isAnonymous: false, email: 'linked@example.com' });
     },
     async signOut() {
       setUser(null);
@@ -312,7 +299,7 @@ export function fakeAccess({
     async createTeam(uid, _name, code) {
       if (state.teamExists) return refuse();
       Object.assign(state, { teamExists: true, captainUids: [uid], joinCode: code });
-      state.members.set(uid, { uid, dancerId: null, provider: 'google', joinedAt: 1 });
+      state.members.set(uid, { uid, dancerId: null, provider: 'anonymous', joinedAt: 1 });
       notify();
     },
     async join(uid, code, provider) {
@@ -322,7 +309,7 @@ export function fakeAccess({
     },
     async joinAsCaptain(uid) {
       if (!state.captainUids.includes(uid)) return refuse();
-      state.members.set(uid, { uid, dancerId: null, provider: 'google', joinedAt: 1 });
+      state.members.set(uid, { uid, dancerId: null, provider: 'anonymous', joinedAt: 1 });
       notify();
     },
     async claimDancer(uid, dancerId, previousDancerId) {

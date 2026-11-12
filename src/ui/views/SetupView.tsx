@@ -20,13 +20,13 @@ export function SetupView() {
       <NotificationsCard />
       <h2>Account</h2>
       <AccountCard />
-      {session.isCaptain.value && <CaptainSetup />}
+      {session.canSetUp.value && <TeamSetup />}
     </>
   );
 }
 
-/** Setting up the team and the competition. Only captains see this (and the rules enforce it). */
-function CaptainSetup() {
+/** Setting up the team and the competition: anyone on the team. */
+function TeamSetup() {
   return (
     <>
       <h2>Team link</h2>

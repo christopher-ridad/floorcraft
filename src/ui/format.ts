@@ -55,8 +55,6 @@ export function sessionProblemText(problem: SessionProblem): string {
   switch (problem) {
     case 'sign-in-failed':
       return "Sign-in didn't finish. Try again.";
-    case 'account-in-use':
-      return 'That Google account is already used on another phone. Sign out there first, or use a different account.';
     case 'team-exists':
       return "The team couldn't be created. It may already exist: ask its captain to add you.";
     case 'dancer-taken':

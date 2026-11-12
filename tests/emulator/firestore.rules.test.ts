@@ -101,9 +101,10 @@ describe('reading', () => {
     await assertFails(getDoc(doc(signedOut(), `${ACTIVE}/schedule/current`)));
   });
 
-  it('keeps the join code from members', async () => {
+  it('shares the join code with everyone on the team, and no one else', async () => {
     await assertSucceeds(getDoc(doc(captain(), `${TEAM}/private/join`)));
-    await assertFails(getDoc(doc(samPhone(), `${TEAM}/private/join`)));
+    await assertSucceeds(getDoc(doc(samPhone(), `${TEAM}/private/join`)));
+    await assertFails(getDoc(doc(anonymous('stranger'), `${TEAM}/private/join`)));
   });
 });
 
@@ -114,8 +115,8 @@ describe('creating the team', () => {
     );
   });
 
-  it('refuses anonymous accounts and teams listing someone else', async () => {
-    await assertFails(
+  it('lets a phone without an account create it, but not list someone else', async () => {
+    await assertSucceeds(
       setDoc(doc(anonymous('anon'), 'teams/new'), { name: 'New', captainUids: ['anon'] }),
     );
     await assertFails(
@@ -168,14 +169,27 @@ describe('captains', () => {
 });
 
 describe('members', () => {
-  it('cannot change setup', async () => {
-    await assertFails(updateDoc(doc(samPhone(), TEAM), { name: 'Hacked' }));
-    await assertFails(
+  it('can change setup, since the team link is the only key', async () => {
+    await assertSucceeds(updateDoc(doc(samPhone(), TEAM), { name: 'Purdue Ballroom' }));
+    await assertSucceeds(
       setDoc(doc(samPhone(), `${TEAM}/dancers/sam`), { name: 'Samuel', active: true }),
     );
-    await assertFails(setDoc(doc(samPhone(), `${ACTIVE}/schedule/current`), { items: [] }));
-    await assertFails(setDoc(doc(samPhone(), `${ACTIVE}/entries/chris-brooke`), { eventIds: [] }));
+    await assertSucceeds(setDoc(doc(samPhone(), `${ACTIVE}/schedule/current`), { items: [] }));
+    await assertSucceeds(
+      setDoc(doc(samPhone(), `${ACTIVE}/entries/chris-brooke`), { eventIds: [] }),
+    );
+  });
+
+  it('cannot replace the join code or change who the captains are', async () => {
     await assertFails(setDoc(doc(samPhone(), `${TEAM}/private/join`), { code: 'mine' }));
+    await assertFails(updateDoc(doc(samPhone(), TEAM), { captainUids: ['samPhone'] }));
+  });
+
+  it('keeps everything from phones that never joined', async () => {
+    const stranger = anonymous('stranger');
+    await assertFails(updateDoc(doc(stranger, TEAM), { name: 'Hacked' }));
+    await assertFails(setDoc(doc(stranger, `${ACTIVE}/schedule/current`), { items: [] }));
+    await assertFails(deleteDoc(doc(stranger, `${TEAM}/claims/chris`)));
   });
 
   it('cannot make themselves captain', async () => {
@@ -243,9 +257,14 @@ describe('claiming a name', () => {
     await assertFails(setDoc(doc(samPhone(), `${TEAM}/claims/sam`), { uid: 'chrisPhone' }));
   });
 
-  it('lets a member give up their own claim, and the captain release any', async () => {
-    await assertFails(deleteDoc(doc(samPhone(), `${TEAM}/claims/chris`)));
-    await assertSucceeds(deleteDoc(doc(chrisPhone(), `${TEAM}/claims/chris`)));
+  it('lets anyone on the team free up a name, unlinking the phone that had it', async () => {
+    await assertSucceeds(deleteDoc(doc(samPhone(), `${TEAM}/claims/chris`)));
+    await assertSucceeds(
+      updateDoc(doc(samPhone(), `${TEAM}/members/chrisPhone`), { dancerId: null }),
+    );
+    await assertFails(
+      updateDoc(doc(samPhone(), `${TEAM}/members/chrisPhone`), { dancerId: 'sam' }),
+    );
     await env.withSecurityRulesDisabled((context) =>
       setDoc(doc(context.firestore(), `${TEAM}/claims/chris`), { uid: 'chrisPhone' }),
     );

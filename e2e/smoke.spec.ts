@@ -43,10 +43,10 @@ test('two phones join with the team link and see each other’s changes', async 
   await brookePhone.getByRole('button', { name: 'Next heat is up' }).click();
   await expect(chrisPhone.getByText(/On the floor · Heat 1/)).toBeVisible();
 
-  // Members see their phone's settings, not the captain's setup.
+  // Everyone on the team gets the setup tools.
   await tab(chrisPhone, 'Setup').click();
   await expect(chrisPhone.getByText('Joined with the team link on this phone')).toBeVisible();
-  await expect(chrisPhone.getByText('Couples & entries')).toHaveCount(0);
+  await expect(chrisPhone.getByText('Couples & entries')).toBeVisible();
 
   // The phone stays on the team after a reload.
   await chrisPhone.reload();
@@ -58,11 +58,11 @@ test('two phones join with the team link and see each other’s changes', async 
 
 test('a visitor without the link is asked for it', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByText(/open the link your captain sent you/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Captain? Sign in with Google' })).toBeVisible();
+  await expect(page.getByText(/open the team link a teammate sent you/)).toBeVisible();
+  await expect(page.getByLabel('Or paste the team link here')).toBeVisible();
 });
 
 test('an old link is refused', async ({ page }) => {
   await page.goto('/#join=not-the-code');
-  await expect(page.getByRole('heading', { name: "That join link didn't work" })).toBeVisible();
+  await expect(page.getByRole('heading', { name: "That team link didn't work" })).toBeVisible();
 });

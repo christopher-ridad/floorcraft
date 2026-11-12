@@ -53,16 +53,7 @@ function Waiting({ children }: { children: ComponentChildren }) {
   );
 }
 
-function CaptainSignIn({ label = 'Captain? Sign in with Google' }: { label?: string }) {
-  const { session } = useApp();
-  return (
-    <button class="btn" onClick={() => void session.actions.signInAsCaptain()}>
-      {label}
-    </button>
-  );
-}
-
-/** For a copy of the app with no address bar (on the Home Screen): paste the team link here. */
+/** Joining with a pasted team link: for a copy of the app with no address bar (on the Home Screen). */
 function JoinWithLink() {
   const { session } = useApp();
   const [link, setLink] = useState('');
@@ -76,7 +67,7 @@ function JoinWithLink() {
       }}
     >
       <label class="field" for="teamLink">
-        Or paste the team link
+        Or paste the team link here
         <input
           id="teamLink"
           type="url"
@@ -100,15 +91,18 @@ function JoinWithLink() {
   );
 }
 
+/** The address of the first-time setup page: the app's address followed by `#setup`. */
+const isSetupPage = () => location.hash === '#setup';
+
 function Welcome() {
+  if (isSetupPage()) return <SetUpTeam />;
   return (
     <Screen>
       <p class={styles.lead}>
-        To join your team, open the link your captain sent you. You'll pick your name, and the app
-        will tell you when you're up.
+        To join your team, open the team link a teammate sent you. You'll pick your name, and the
+        app will tell you when you're up.
       </p>
       <JoinWithLink />
-      <CaptainSignIn />
     </Screen>
   );
 }
@@ -116,38 +110,36 @@ function Welcome() {
 function JoinFailed() {
   return (
     <Screen>
-      <h2 class={styles.title}>That join link didn't work</h2>
-      <p class={styles.lead}>It may be an old link. Ask your captain for the current one.</p>
+      <h2 class={styles.title}>That team link didn't work</h2>
+      <p class={styles.lead}>It may be an old link. Ask a teammate for the current one.</p>
       <JoinWithLink />
-      <CaptainSignIn />
     </Screen>
   );
 }
 
 function NotOnTeam() {
   const { session } = useApp();
-  const user = session.user.value;
+  if (isSetupPage()) return <SetUpTeam />;
   return (
     <Screen>
       <h2 class={styles.title}>You're not on the team yet</h2>
-      <p class={styles.lead}>
-        {user?.email ? `Signed in as ${user.email}. ` : ''}Ask your captain for the team link and
-        open it on this phone.
-      </p>
-      {user && !user.isAnonymous && <CreateTeam />}
+      <p class={styles.lead}>Open the team link a teammate sent you, or paste it here.</p>
+      <JoinWithLink />
       <button class="btn ghost" onClick={() => void session.actions.signOut()}>
-        Sign out
+        Start over
       </button>
     </Screen>
   );
 }
 
-/** First-time setup: whoever creates the team becomes its captain. */
-function CreateTeam() {
+/**
+ * First-time setup, only at the `#setup` address: creates the team, with this phone as the one
+ * that can replace the team link. Fails harmlessly if the team already exists.
+ */
+function SetUpTeam() {
   const { session } = useApp();
   const [teamName, setTeamName] = useState('');
   const [isBusy, setBusy] = useState(false);
-  const isComplete = !!teamName.trim();
 
   const create = async () => {
     setBusy(true);
@@ -156,27 +148,29 @@ function CreateTeam() {
   };
 
   return (
-    <details class={`card ${styles.setUp}`}>
-      <summary>Setting up the team for the first time?</summary>
-      <div class="stack">
-        <label class="field" for="teamName">
-          Team name
-          <input
-            id="teamName"
-            type="text"
-            value={teamName}
-            onInput={(event) => setTeamName(event.currentTarget.value)}
-          />
-        </label>
-        <button class="btn primary" disabled={!isComplete || isBusy} onClick={() => void create()}>
-          Create the team
-        </button>
-        <span class="muted">
-          You'll be its captain. The {PURDUE_CLASSIC.name} schedule and everyone's dances come with
-          it.
-        </span>
-      </div>
-    </details>
+    <Screen>
+      <h2 class={styles.title}>Set up the team</h2>
+      <p class={styles.lead}>
+        Only needed once. The {PURDUE_CLASSIC.name} schedule and everyone's dances come with it;
+        then share the team link from Setup.
+      </p>
+      <label class="field" for="teamName">
+        Team name
+        <input
+          id="teamName"
+          type="text"
+          value={teamName}
+          onInput={(event) => setTeamName(event.currentTarget.value)}
+        />
+      </label>
+      <button
+        class="btn primary"
+        disabled={!teamName.trim() || isBusy}
+        onClick={() => void create()}
+      >
+        Create the team
+      </button>
+    </Screen>
   );
 }
 
@@ -202,7 +196,7 @@ function ChooseDancer() {
         <p class="muted">Loading the team…</p>
       ) : !dancers.length ? (
         <p class="muted" role="status">
-          {session.isCaptain.value
+          {session.canSetUp.value
             ? 'Adding the team’s names…'
             : "Your captain hasn't opened the app yet, so the team's names aren't here. Tap “I'm not dancing” for now; you can pick your name later in Setup."}
         </p>

@@ -31,31 +31,16 @@ export function AccountCard() {
             <span class="muted">Not linked to a dancer</span>
           )}
           <br />
-          <span class={cx('muted', styles.note)}>
-            {user.isAnonymous
-              ? 'Joined with the team link on this phone'
-              : `Signed in as ${user.email ?? 'a Google account'}`}
-            {session.isCaptain.value && ' · Captain'}
-          </span>
+          <span class={cx('muted', styles.note)}>Joined with the team link on this phone</span>
         </span>
         <button class="btn small" onClick={() => session.actions.changeDancer()}>
           {dancer ? 'Change' : 'Pick my name'}
         </button>
       </div>
-      {user.isAnonymous && (
-        <div class="row">
-          <button class="btn small" onClick={() => void session.actions.linkWithGoogle()}>
-            Keep me signed in on any device
-          </button>
-          <span class={cx('muted', styles.note)}>Links a Google account to this phone's spot.</span>
-        </div>
-      )}
       {problem && <div class="banner">{sessionProblemText(problem)}</div>}
       {isConfirmingSignOut ? (
         <div class="row">
-          <span class="bad">
-            {user.isAnonymous ? "You'll need the team link to get back in. Sign out?" : 'Sign out?'}
-          </span>
+          <span class="bad">You'll need the team link to get back in. Sign out?</span>
           <button class="btn small danger" onClick={() => void session.actions.signOut()}>
             Sign out
           </button>
@@ -74,7 +59,7 @@ export function AccountCard() {
   );
 }
 
-/** The link teammates open to join. Captains only. */
+/** The link teammates open to join. Anyone on the team can share it; only captains replace it. */
 export function TeamAccessCard() {
   const { session, view } = useApp();
   const code = session.joinCode.value;
@@ -108,7 +93,7 @@ export function TeamAccessCard() {
         <button class="btn primary small" onClick={() => void copy()}>
           Copy link
         </button>
-        {isConfirmingNewLink ? (
+        {!session.isCaptain.value ? null : isConfirmingNewLink ? (
           <>
             <span class="bad">
               The old link will stop working. Phones that already joined stay.
@@ -139,7 +124,7 @@ export function TeamAccessCard() {
 
 /**
  * Which dancers' names are linked to a phone, and freeing one up, e.g. when someone moves to the
- * Home Screen app on their iPhone and finds their name taken. Captains only.
+ * Home Screen app on their iPhone and finds their name taken.
  */
 export function NamesInUseCard() {
   const { session, store, view } = useApp();

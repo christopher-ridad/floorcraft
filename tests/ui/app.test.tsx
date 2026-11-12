@@ -301,16 +301,19 @@ describe('Setup tab', () => {
 });
 
 describe('getting in', () => {
-  it('asks a visitor without a link to get one, and lets the captain sign in', async () => {
-    const { user } = await renderApp({
-      signedIn: null,
-      access: fakeAccess({ captainUids: ['google-user'] }),
-      preferences: { skipDancerClaim: true },
-    });
-    expect(screen.getByText(/open the link your captain sent you/)).toBeTruthy();
+  it('asks a visitor without a link for one, and joins with a pasted link', async () => {
+    const { user, session } = await renderApp({ signedIn: null });
+    expect(screen.getByText(/open the team link a teammate sent you/)).toBeTruthy();
+    expect(screen.queryByText(/Google/)).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Captain? Sign in with Google' }));
-    expect(await screen.findByText('Competition not started')).toBeTruthy();
+    await user.type(
+      screen.getByLabelText('Or paste the team link here'),
+      'https://example.github.io/floorcraft/#join=team-code',
+    );
+    await user.click(screen.getByRole('button', { name: 'Join the team' }));
+
+    expect(await screen.findByRole('heading', { name: 'Who are you?' })).toBeTruthy();
+    expect(session.membership.value).toMatchObject({ dancerId: null });
   });
 
   it('joins with the team link and asks who you are', async () => {
@@ -335,28 +338,29 @@ describe('getting in', () => {
 
   it('explains a join link that no longer works', async () => {
     await renderApp({ signedIn: null, joinCode: 'old-code' });
-    expect(screen.getByRole('heading', { name: "That join link didn't work" })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: "That team link didn't work" })).toBeTruthy();
   });
 
-  it('lets a Google account create the team the first time', async () => {
-    const access = fakeAccess({ teamExists: false });
-    const { user } = await renderApp({
-      signedIn: { ...captain, uid: 'founder' },
-      access,
-    });
-    expect(screen.getByRole('heading', { name: "You're not on the team yet" })).toBeTruthy();
+  it('creates the team at the setup address, the first time only', async () => {
+    location.hash = '#setup';
+    try {
+      const access = fakeAccess({ teamExists: false });
+      const { user } = await renderApp({ signedIn: null, access });
+      expect(screen.getByRole('heading', { name: 'Set up the team' })).toBeTruthy();
 
-    await user.click(screen.getByText('Setting up the team for the first time?'));
-    await user.type(screen.getByLabelText('Team name'), 'Purdue Ballroom');
-    await user.click(screen.getByRole('button', { name: 'Create the team' }));
+      await user.type(screen.getByLabelText('Team name'), 'Purdue Ballroom');
+      await user.click(screen.getByRole('button', { name: 'Create the team' }));
 
-    expect(await screen.findByRole('heading', { name: 'Who are you?' })).toBeTruthy();
-    expect(access.state.captainUids).toEqual(['founder']);
+      expect(await screen.findByRole('heading', { name: 'Who are you?' })).toBeTruthy();
+      expect(access.state.captainUids).toHaveLength(1);
+    } finally {
+      location.hash = '';
+    }
   });
 });
 
 describe('Setup for members and captains', () => {
-  it('shows members only this phone’s settings and their account', async () => {
+  it('gives every member the setup tools and the team link, but not a new link', async () => {
     const access = fakeAccess();
     await access.access.join('phone', 'team-code', 'anonymous');
     await access.access.claimDancer('phone', 'sam', null);
@@ -367,9 +371,12 @@ describe('Setup for members and captains', () => {
     });
 
     expect(screen.getByText('Joined with the team link on this phone')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Keep me signed in on any device' })).toBeTruthy();
-    expect(screen.queryByText('Team link')).toBeNull();
-    expect(screen.queryByText('Couples & entries')).toBeNull();
+    expect(screen.queryByText(/Google/)).toBeNull();
+    expect((screen.getByLabelText('Team link') as HTMLInputElement).value).toMatch(
+      /#join=team-code$/,
+    );
+    expect(screen.queryByRole('button', { name: 'Make a new link' })).toBeNull();
+    expect(screen.getByText('Couples & entries')).toBeTruthy();
   });
 
   it('gives captains the team link, and a way to replace it', async () => {

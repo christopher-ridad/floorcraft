@@ -13,7 +13,7 @@ The app is made for this one competition only. The schedule and partnerships liv
 - **Push notifications:** the same alerts with the app closed. Each phone turns them on once (**Turn on notifications** on the Now tab); on iPhone the app must first be added to the Home Screen, and the Home Screen app asks for the team link. A Cloud Function ([functions/src](functions/src)) sends them whenever the floor moves and every minute during the competition, once per phone and alert.
 - **Day-of edits:** mark any heat as on the floor, fix a heat's time or name, add or delete heats, rename partners, and add or remove events.
 - **Schedule:** the official 2026 schedule is loaded when the team is created. **Setup → Schedule** shows whether the schedule is the official one, and loads it over an older one; couples' entries and callbacks stay with their events even where events were renumbered.
-- **Partnerships:** the 2026 partnerships sheet is built in too, and matched to events automatically (shorthand like `Silver I. Standard (TF)` matches `Silver Intl. Standard (FT)`). The first time a captain opens the app, it writes the official schedule, roster and entries for everyone, once per version (`OFFICIAL_DATA_VERSION` in [src/domain/purdue.ts](src/domain/purdue.ts)); after that, day-of edits in **Setup → Couples & entries** are kept. To change the built-in data, edit that file and bump the version.
+- **Partnerships:** the 2026 partnerships sheet is built in too, and matched to events automatically (shorthand like `Silver I. Standard (TF)` matches `Silver Intl. Standard (FT)`). The first time a phone on the team opens the app, it writes the official schedule, roster and entries for everyone, once per version (`OFFICIAL_DATA_VERSION` in [src/domain/purdue.ts](src/domain/purdue.ts)); after that, day-of edits in **Setup → Couples & entries** are kept. To change the built-in data, edit that file and bump the version.
 
 ## Project layout
 
@@ -70,9 +70,9 @@ The app reaches the data through the `HeatSheetRepository` interface in [src/app
 
 ## Getting in
 
-- **Captains** sign in with Google. The first Google account to open the app can create the team and becomes its captain.
-- **Teammates** open the team link the captain shares (**Setup → Team link**), then pick their name. No account needed; a teammate can optionally link a Google account to keep their spot on any device.
-- **Setup** shows only this phone's settings to teammates; captains also get the team link, the schedule, and couples. The rules in [firestore.rules](firestore.rules) enforce this on the server.
+- **No accounts.** The team link is the key: open it (or paste it on the welcome screen, e.g. in an iPhone Home Screen app), then pick your name.
+- **Everyone on the team** gets the full Setup: the team link to share, couples and entries, freeing up names, backups. The rules in [firestore.rules](firestore.rules) keep everything from phones that haven't joined.
+- **Captains** (whoever created the team) additionally replace the team link. The team is created once, at the app's address followed by `#setup`.
 
 ## Backups and moving data in
 
@@ -88,4 +88,4 @@ After restoring it, load the official schedule in **Setup → Schedule**.
 
 ## Trying it locally
 
-`npm run emulators` starts local Firebase, and `npm run dev` serves the app against it. Sign in as captain with the emulator's fake Google sign-in, create the team; the official schedule and everyone's dances come with it. Open the team link in another browser to join as a teammate.
+`npm run emulators` starts local Firebase, and `npm run dev` serves the app against it. Open it with `#setup` at the end of the address and create the team; the official schedule and everyone's dances come with it. Copy the team link from **Setup**. Open the team link in another browser to join as a teammate.

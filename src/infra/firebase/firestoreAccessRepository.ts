@@ -122,7 +122,7 @@ export function firestoreAccessRepository({
           createdAt: now(),
         });
         await setDoc(joinRef(), { code: joinCode });
-        await setDoc(memberRef(uid), { dancerId: null, provider: 'google', joinedAt: now() });
+        await setDoc(memberRef(uid), { dancerId: null, provider: 'anonymous', joinedAt: now() });
       }),
 
     join: (uid, joinCode, provider: SignInProvider) =>

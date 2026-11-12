@@ -60,12 +60,12 @@ async function createTeam() {
 }
 
 describe('creating the team', () => {
-  it('makes the Google account its captain and first member', async () => {
+  it('makes the creating phone its captain and first member', async () => {
     await createTeam();
     expect(await accessOf(captain(), 'captain', (access) => access.kind === 'team')).toEqual({
       kind: 'team',
       isCaptain: true,
-      membership: { uid: 'captain', dancerId: null, provider: 'google', joinedAt: 1000 },
+      membership: { uid: 'captain', dancerId: null, provider: 'anonymous', joinedAt: 1000 },
     });
   });
 
@@ -167,13 +167,13 @@ describe('picking a name', () => {
     await phone('phoneB').claimDancer('phoneB', 'chris', null);
   });
 
-  it('lets a captain free up a name for another phone, and no one else', async () => {
+  it('lets anyone on the team free up a name for another phone', async () => {
     await phone('phoneA').claimDancer('phoneA', 'chris', null);
-    await expect(phone('phoneB').releaseDancer('chris', 'phoneA')).rejects.toMatchObject({
+    await expect(phone('stranger').releaseDancer('chris', 'phoneA')).rejects.toMatchObject({
       code: 'read-only',
     });
 
-    await captain().releaseDancer('chris', 'phoneA');
+    await phone('phoneB').releaseDancer('chris', 'phoneA');
 
     expect(await claimsOf(phone('phoneB'))).toEqual({});
     expect(await accessOf(phone('phoneA'), 'phoneA')).toMatchObject({

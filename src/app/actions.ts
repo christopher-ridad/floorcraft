@@ -110,11 +110,20 @@ export function createActions(ctx: ActionContext) {
     save(repository.savePartnerships([updated]));
   }
 
+  /**
+   * Ids for what the built-in data adds, the same on every phone: if two phones apply it at
+   * once, they write the same documents instead of duplicating dancers, couples or events.
+   */
+  const officialIds = (part: string): IdFactory => {
+    let next = 0;
+    return () => `official-${OFFICIAL_DATA_VERSION}-${part}${++next}`;
+  };
+
   function writeOfficialData(info: CompetitionInfo, current: Schedule) {
     const isOfficial = isOfficialSchedule(current.items);
     const schedule = isOfficial
       ? current
-      : officialSchedule({ previousEvents: current.events, createId: ctx.createId });
+      : officialSchedule({ previousEvents: current.events, createId: officialIds('s') });
     if (!isOfficial) {
       // Every line is new, so the floor position no longer points at anything.
       if (ctx.competitionData.peek().floor.currentItemId && info.id === competitionId()) {
@@ -127,7 +136,7 @@ export function createActions(ctx: ActionContext) {
       parsePartnershipRows(OFFICIAL_PARTNERSHIPS_TEXT),
       ctx.team.peek(),
       buildEventCatalog(schedule.events),
-      ctx.createId,
+      officialIds('r'),
     );
     save(repository.saveDancers(roster.dancers));
     save(repository.savePartnerships(roster.partnerships));

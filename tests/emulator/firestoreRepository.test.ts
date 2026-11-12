@@ -159,18 +159,13 @@ describe('Firestore repository', () => {
     expect(cleared.floor).toEqual({ currentItemId: null, currentSetAt: null });
   });
 
-  it('refuses setup changes from members, as read-only', async () => {
+  it('lets members change setup, and refuses phones that never joined, as read-only', async () => {
     await setUpCompetition(repositoryFor('captain'));
-    const member = repositoryFor('sam');
-    await expect(member.saveSchedule(COMPETITION, { items: [], events: [] })).rejects.toMatchObject(
-      {
-        name: 'SyncFailure',
-        code: 'read-only',
-      },
-    );
+    await repositoryFor('sam').saveDancers([{ id: 'sam', name: 'Sam', active: true }]);
+    const stranger = repositoryFor('stranger');
     await expect(
-      member.saveDancers([{ id: 'sam', name: 'Sam', active: true }]),
-    ).rejects.toMatchObject({ code: 'read-only' });
+      stranger.saveSchedule(COMPETITION, { items: [], events: [] }),
+    ).rejects.toMatchObject({ name: 'SyncFailure', code: 'read-only' });
   });
 
   it('reports that the data is unavailable to someone who has not joined', async () => {

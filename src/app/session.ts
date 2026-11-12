@@ -285,6 +285,18 @@ export function createSession(deps: SessionDependencies) {
         isChoosingDancer.value = false;
       }),
 
+    /**
+     * Moves a name another phone has to this one: for the same person on a new phone, a new
+     * browser, or their iPhone's Home Screen app. The other phone stops being that dancer.
+     */
+    takeOverDancer: (dancerId: string) =>
+      attempt(async () => {
+        const holder = claims.peek()[dancerId];
+        const signedIn = user.peek();
+        if (holder && holder !== signedIn?.uid) await access.releaseDancer(dancerId, holder);
+        await actions.chooseDancer(dancerId);
+      }),
+
     /** This phone doesn't belong to a dancer (e.g. a captain who isn't dancing). */
     skipChoosingDancer() {
       store.actions.updatePreferences({ skipDancerClaim: true });

@@ -325,15 +325,21 @@ describe('getting in', () => {
     expect(session.membership.value?.dancerId).toBe('chris');
   });
 
-  it('shows names other phones have taken', async () => {
+  it('shows names other phones have taken, and moves one here when it is you', async () => {
     const access = fakeAccess();
     await access.access.join('other', 'team-code', 'anonymous');
     await access.access.claimDancer('other', 'chris', null);
-    await renderApp({ signedIn: null, joinCode: 'team-code', access });
+    const { user, session } = await renderApp({ signedIn: null, joinCode: 'team-code', access });
 
-    const chris = screen.getByRole('button', { name: /^Chris/ }) as HTMLButtonElement;
-    expect(chris.disabled).toBe(true);
+    const chris = screen.getByRole('button', { name: /^Chris/ });
     expect(within(chris).getByText('Taken')).toBeTruthy();
+
+    await user.click(chris);
+    await user.click(screen.getByRole('button', { name: "That's me, move it here" }));
+
+    expect(await screen.findByText('Chris, your next heat')).toBeTruthy();
+    expect(session.membership.value?.dancerId).toBe('chris');
+    expect(access.state.members.get('other')?.dancerId).toBeNull();
   });
 
   it('explains a join link that no longer works', async () => {

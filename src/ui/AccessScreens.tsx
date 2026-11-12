@@ -181,6 +181,8 @@ function ChooseDancer() {
   const dancers = store.team.value.dancers
     .filter((dancer) => dancer.active)
     .sort((a, b) => dancerName(a.name).localeCompare(dancerName(b.name)));
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const takenDancer = dancers.find((dancer) => dancer.id === confirming);
 
   return (
     <Screen>
@@ -209,8 +211,10 @@ function ChooseDancer() {
               <button
                 key={dancer.id}
                 class={styles.dancer}
-                disabled={isTaken}
-                onClick={() => void session.actions.chooseDancer(dancer.id)}
+                aria-pressed={confirming === dancer.id}
+                onClick={() =>
+                  isTaken ? setConfirming(dancer.id) : void session.actions.chooseDancer(dancer.id)
+                }
               >
                 {dancerName(dancer.name)}
                 {isTaken && <span>Taken</span>}
@@ -218,6 +222,29 @@ function ChooseDancer() {
               </button>
             );
           })}
+        </div>
+      )}
+      {takenDancer && (
+        <div class="card stack" role="alert">
+          <span>
+            <b>{dancerName(takenDancer.name)}</b> is picked on another phone. If that's you (say, an
+            old browser or before adding the app to your Home Screen), move it here. The other phone
+            will stop getting {dancerName(takenDancer.name)}'s alerts.
+          </span>
+          <div class="row">
+            <button
+              class="btn primary"
+              onClick={() => {
+                setConfirming(null);
+                void session.actions.takeOverDancer(takenDancer.id);
+              }}
+            >
+              That's me, move it here
+            </button>
+            <button class="btn" onClick={() => setConfirming(null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       <button class="btn ghost" onClick={() => session.actions.skipChoosingDancer()}>

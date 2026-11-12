@@ -33,10 +33,10 @@ test('two phones join with the team link and see each other’s changes', async 
   const chrisErrors = await joinAs(chrisPhone, 'Chris');
   const brookeErrors = await joinAs(brookePhone, 'Brooke');
 
-  // Chris is taken now, so a third phone can't pick that name.
+  // Chris is taken now: a third phone sees that (and could move the name only on purpose).
   const thirdPhone = await (await browser.newContext()).newPage();
   await thirdPhone.goto(`/#join=${JOIN_CODE}`);
-  await expect(thirdPhone.getByRole('button', { name: /^Chris/ })).toBeDisabled();
+  await expect(thirdPhone.getByRole('button', { name: /^Chris/ })).toContainText('Taken');
 
   // Brooke's phone starts the competition; Chris's phone follows along.
   await brookePhone.getByRole('button', { name: 'First heat is on the floor' }).click();

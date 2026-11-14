@@ -13,7 +13,12 @@ interface CoupleChipProps {
 export function CoupleChip({ couple, highlightMine = true }: CoupleChipProps) {
   const { dancer } = useApp().store.preferences.value;
   const isMine = highlightMine && !!dancer && isInCouple(couple, dancer);
-  return <span class={cx('chip', isMine && 'me')}>{coupleName(couple)}</span>;
+  return (
+    <span class={cx('chip', isMine && 'me')}>
+      {couple.number && <span class="mono">#{couple.number} </span>}
+      {coupleName(couple)}
+    </span>
+  );
 }
 
 /** The team's couples in a heat. */

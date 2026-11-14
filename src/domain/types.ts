@@ -28,6 +28,8 @@ export interface Couple {
   id: string;
   lead: string;
   follow: string;
+  /** The couple's competitor number (the lead's), when known. */
+  number?: string;
 }
 
 // ---- A competition ----

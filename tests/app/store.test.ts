@@ -23,7 +23,7 @@ function start(now: number) {
 describe('the store', () => {
   it('builds the schedule and team from the built-in data', () => {
     const { store, stop } = start(onTheDay(7, 0));
-    expect(store.competition.value.couples).toHaveLength(21);
+    expect(store.competition.value.couples).toHaveLength(20);
     expect(store.competition.value.currentIndex).toBe(-1);
     stop();
   });

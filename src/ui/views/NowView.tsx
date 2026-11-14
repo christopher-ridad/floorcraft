@@ -84,6 +84,11 @@ function MyNextHeat() {
         <div class={styles.what}>
           {title(onFloor.heat)} · {round(onFloor.heat)} with {partner(onFloor)}
         </div>
+        {onFloor.couple.number && (
+          <div class={cx('muted', styles.meta)}>
+            Number <span class="mono">{onFloor.couple.number}</span>
+          </div>
+        )}
         {next && (
           <div class={cx('muted', styles.followUp)}>
             After this: {title(next.heat)} in {away(next.heat)} heats
@@ -118,6 +123,11 @@ function MyNextHeat() {
           {ifCalledBack(next)}
         </div>
         <div class={cx('muted', styles.meta)}>
+          {next.couple.number && (
+            <>
+              Number <span class="mono">{next.couple.number}</span> ·{' '}
+            </>
+          )}
           Heat <span class="mono">{next.heat.eventNumber}</span> · about{' '}
           <span class="mono">{formatClockTime(nextEstimate)}</span>
           {nextAway !== null && minutesUntil > 0 && ` · in ~${minutesUntil} min`}

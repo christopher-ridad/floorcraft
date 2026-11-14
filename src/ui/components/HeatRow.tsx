@@ -74,6 +74,12 @@ export function HeatRow({ heat, showAway = false, dancer = null }: HeatRowProps)
           ? dancersCouple && (
               <span class={cx('muted', styles.partner)}>
                 with {partnerName(partnerOf(dancersCouple, dancer))}
+                {dancersCouple.number && (
+                  <>
+                    {' · '}
+                    <span class="mono">#{dancersCouple.number}</span>
+                  </>
+                )}
               </span>
             )
           : hasTeam(team) && <TeamChips team={team} />}

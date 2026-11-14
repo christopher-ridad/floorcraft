@@ -29,6 +29,7 @@ describe('the built-in team', () => {
     expect(numberOf('Jenya', 'Alice')).toBe('329');
     expect(numberOf('Alice', 'Jiayi')).toBe('445');
     expect(numberOf('Yumna', 'Erica')).toBe('369');
+    expect(numberOf('Liam (TBA)', 'Abby')).toBe('418');
     expect(numberOf('Sylvia', 'Aleksandra')).toBeUndefined();
   });
 

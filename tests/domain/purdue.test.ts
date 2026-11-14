@@ -13,12 +13,21 @@ const describeItem = (item: ScheduleItem | null) =>
 describe('the built-in team', () => {
   it('has every partnership, each with its events on the schedule', () => {
     const { couples, entries, schedule } = loadPurdueData();
-    expect(couples).toHaveLength(21);
+    expect(couples).toHaveLength(20);
     const eventIds = new Set(schedule.events.map((event) => event.eventId));
     for (const couple of couples) {
       expect(entries[couple.id]?.length, `${couple.lead} & ${couple.follow}`).toBeGreaterThan(0);
       expect(entries[couple.id]?.every((eventId) => eventIds.has(eventId))).toBe(true);
     }
+  });
+
+  it('numbers each couple by its lead', () => {
+    const numberOf = (lead: string, follow: string) =>
+      loadPurdueData().couples.find((c) => c.lead === lead && c.follow === follow)?.number;
+    expect(numberOf('Chris', 'Brooke')).toBe('441');
+    expect(numberOf('Zach', 'Erica')).toBe('390');
+    expect(numberOf('Jenya', 'Alice')).toBe('329');
+    expect(numberOf('Alice', 'Jiayi')).toBeUndefined();
   });
 
   it('gives each dancer their heats', () => {

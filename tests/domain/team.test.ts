@@ -108,12 +108,12 @@ describe('importing partnerships', () => {
       buildEventCatalog(schedule.events),
       sequentialIds(),
     );
-    expect(result.partnerships).toHaveLength(21);
+    expect(result.partnerships).toHaveLength(20);
     expect(result.unmatched).toEqual([]);
     // A lead or follow still to be announced is no dancer.
-    const jiayi = result.dancers.find((dancer) => dancer.name === 'Jiayi')?.id;
-    const tbaLead = result.partnerships.find((p) => p.leadId === null && p.followId === jiayi);
-    expect(result.entries[tbaLead?.id ?? '']).toHaveLength(5);
+    const zach = result.dancers.find((dancer) => dancer.name === 'Zach')?.id;
+    const tbaFollow = result.partnerships.find((p) => p.leadId === zach && p.followId === null);
+    expect(result.entries[tbaFollow?.id ?? '']).toHaveLength(1);
     // "Liam (TBA)" and the TBA rows share dancers with other rows.
     expect(new Set(result.dancers.map((dancer) => dancer.name.toLowerCase())).size).toBe(
       result.dancers.length,

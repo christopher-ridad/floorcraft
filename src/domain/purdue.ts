@@ -2,6 +2,7 @@
 
 import { localDate, minutesSinceMidnight, parseClockTime } from './clock';
 import { deriveCompetition, type Competition } from './competition';
+import { dancerName } from './dancers';
 import { parsePartnershipRows } from './entries/parsePartnershipRows';
 import { buildEventCatalog } from './schedule/eventCatalog';
 import { parseSchedule, type ParseScheduleOptions } from './schedule/parseSchedule';
@@ -194,13 +195,30 @@ Liam (TBA)	Abby	Bronze	Bronze I. Latin (CR)
 Nathanio	Phoebe	Newcomer	Newcomer A. Waltz
 Peter	Abby	Bronze, Silver	Bronze I. Standard (WQ), Bronze I. Standard (TF), Silver I. Standard (WQ), Silver I. Standard (TF)
 Sylvia	Aleksandra	Newcomer	Newcomer A. Waltz, Newcomer A. Foxtrot, Newcomer I. Waltz, Newcomer A. Cha Cha, Newcomer Swing, Newcomer I. Cha Cha, Bronze A. Rhythm (SM)
-TBA	Jiayi	Bronze	Bronze A. Smooth (WT), Bronze A. Smooth (FV), Bronze A. Rhythm (SM), Bronze A. Rhythm (CR), Bronze I. Standard (TF)
 Yumna	Erica	Bronze	Bronze I. Standard (WQ)
 Zach	Leon	Bronze	Bronze A. Smooth (FV), Bronze I. Standard (WQ)
 Zach	Erica	Bronze	Bronze A. Smooth (WT), Bronze I. Standard (TF)
 Zach	TBA	Bronze	Bronze I. Latin (CR)
 Alice	TBA	Silver	Silver I. Standard (WQ), Silver I. Standard (TF)
 `;
+
+/** Each lead's competitor number. A couple wears its lead's number. */
+export const LEAD_NUMBERS: Readonly<Record<string, string>> = {
+  Nathanio: '333',
+  Franke: '336',
+  Zach: '390',
+  Leon: '414',
+  Chris: '441',
+  Jenya: '329',
+  Kennedy: '448',
+  Andrey: '379',
+  Peter: '400',
+};
+
+const withNumber = (couple: Couple): Couple => {
+  const number = LEAD_NUMBERS[dancerName(couple.lead)];
+  return number ? { ...couple, number } : couple;
+};
 
 /**
  * The official schedule, as stored data. Pass the current schedule's events so events that match
@@ -253,7 +271,7 @@ export function loadPurdueData(): PurdueData {
   );
   purdueData = {
     schedule,
-    couples: resolveCouples(roster.dancers, roster.partnerships),
+    couples: resolveCouples(roster.dancers, roster.partnerships).map(withNumber),
     entries: roster.entries,
   };
   return purdueData;

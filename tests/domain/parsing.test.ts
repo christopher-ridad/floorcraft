@@ -230,7 +230,7 @@ describe('partnership rows', () => {
   it('matches every built-in entry to a scheduled event', () => {
     const events = buildEventCatalog(officialSchedule().events);
     const rows = parsePartnershipRows(OFFICIAL_PARTNERSHIPS_TEXT);
-    expect(rows).toHaveLength(20);
+    expect(rows).toHaveLength(21);
 
     const misses = rows.flatMap((row) =>
       row.entries

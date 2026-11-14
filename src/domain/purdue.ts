@@ -213,6 +213,8 @@ export const LEAD_NUMBERS: Readonly<Record<string, string>> = {
   Kennedy: '448',
   Andrey: '379',
   Peter: '400',
+  Alice: '445',
+  Yumna: '369',
 };
 
 const withNumber = (couple: Couple): Couple => {

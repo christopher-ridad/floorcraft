@@ -27,7 +27,9 @@ describe('the built-in team', () => {
     expect(numberOf('Chris', 'Brooke')).toBe('441');
     expect(numberOf('Zach', 'Erica')).toBe('390');
     expect(numberOf('Jenya', 'Alice')).toBe('329');
-    expect(numberOf('Alice', 'Jiayi')).toBeUndefined();
+    expect(numberOf('Alice', 'Jiayi')).toBe('445');
+    expect(numberOf('Yumna', 'Erica')).toBe('369');
+    expect(numberOf('Sylvia', 'Aleksandra')).toBeUndefined();
   });
 
   it('gives each dancer their heats', () => {

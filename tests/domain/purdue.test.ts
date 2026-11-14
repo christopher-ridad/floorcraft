@@ -13,7 +13,7 @@ const describeItem = (item: ScheduleItem | null) =>
 describe('the built-in team', () => {
   it('has every partnership, each with its events on the schedule', () => {
     const { couples, entries, schedule } = loadPurdueData();
-    expect(couples).toHaveLength(20);
+    expect(couples).toHaveLength(21);
     const eventIds = new Set(schedule.events.map((event) => event.eventId));
     for (const couple of couples) {
       expect(entries[couple.id]?.length, `${couple.lead} & ${couple.follow}`).toBeGreaterThan(0);

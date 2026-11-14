@@ -108,7 +108,7 @@ describe('importing partnerships', () => {
       buildEventCatalog(schedule.events),
       sequentialIds(),
     );
-    expect(result.partnerships).toHaveLength(20);
+    expect(result.partnerships).toHaveLength(21);
     expect(result.unmatched).toEqual([]);
     // A lead or follow still to be announced is no dancer.
     const zach = result.dancers.find((dancer) => dancer.name === 'Zach')?.id;

@@ -195,6 +195,7 @@ Liam (TBA)	Abby	Bronze	Bronze I. Latin (CR)
 Nathanio	Phoebe	Newcomer	Newcomer A. Waltz
 Peter	Abby	Bronze, Silver	Bronze I. Standard (WQ), Bronze I. Standard (TF), Silver I. Standard (WQ), Silver I. Standard (TF)
 Sylvia	Aleksandra	Newcomer	Newcomer A. Waltz, Newcomer A. Foxtrot, Newcomer I. Waltz, Newcomer A. Cha Cha, Newcomer Swing, Newcomer I. Cha Cha, Bronze A. Rhythm (SM)
+TBA	Jiayi	Bronze	Bronze I. Standard (TF)
 Yumna	Erica	Bronze	Bronze I. Standard (WQ)
 Zach	Leon	Bronze	Bronze A. Smooth (FV), Bronze I. Standard (WQ)
 Zach	Erica	Bronze	Bronze A. Smooth (WT), Bronze I. Standard (TF)
